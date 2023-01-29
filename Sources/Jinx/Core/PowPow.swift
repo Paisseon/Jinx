@@ -67,7 +67,7 @@ struct PowPow {
         var paths: [String] = [
             "/usr/lib/libellekit.dylib",
             "/usr/lib/libhooker.dylib",
-            "/usr/lib/libsubstitute.dylib",
+//            "/usr/lib/libsubstitute.dylib",
             "/Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate",
             "@executable_path/Frameworks/CydiaSubstrate.framework/CydiaSubstrate"
         ]
