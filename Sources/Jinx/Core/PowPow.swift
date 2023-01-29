@@ -3,7 +3,7 @@ import MachO
 
 // MARK: - PowPow
 
-public enum PowPow {
+struct PowPow {
     // MARK: Internal
 
     static var dyldMap: HashMap<String, UnsafeMutableRawPointer> = .init()
