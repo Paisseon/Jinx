@@ -7,21 +7,36 @@ public protocol HookFunc {
 }
 
 public extension HookFunc {
+    private static var _orig: UnsafeMutableRawPointer? {
+        get {
+            if case .raw(let ptr) = PowPow.origMap.get(ObjectIdentifier(Self.self)) {
+                return ptr
+            }
+            
+            return nil
+        }
+        
+        set {
+            PowPow.origMap.set(Pointer.raw(newValue!), for: ObjectIdentifier(Self.self))
+        }
+    }
+    
+    static var orig: T {
+        unsafeBitCast(_orig, to: T.self)
+    }
+    
     @discardableResult
     func hook(
         onlyIf condition: Bool = true
-    ) -> Bool {
+    ) -> JinxResult {
         guard condition,
               let replacementPtr: UnsafeMutableRawPointer = unsafeBitCast(replacement, to: UnsafeMutableRawPointer?.self)
         else {
-            return false
+            return .noFunction
         }
         
-        return PowPow.hookFunc(
-            function,
-            image,
-            replacementPtr,
-            type(of: self)
-        )
+        var sss: UnsafeMutableRawPointer?
+        
+        return PowPow.replaceFunc(function, in: image, with: replacementPtr, orig: &sss)
     }
 }

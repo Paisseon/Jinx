@@ -1,28 +1,18 @@
-import Foundation
-
-struct HashMap<T, U> {
-    private var items: [String: T?] = [:]
+struct HashMap<T: Hashable, U> {
+    private var items: [T: U?] = [:]
     
     mutating func set(
-        _ item: T?,
-        for key: U
+        _ item: U?,
+        for key: T
     ) {
-        if items["\(key)"] == nil {
-            items["\(key)"] = item
+        if items[key] == nil {
+            items[key] = item
         }
     }
     
     func get(
-        _ key: U
-    ) -> T? {
-        if let val: T? = items["\(key)"] {
-            return val
-        }
-        
-        return nil
+        _ key: T
+    ) -> U? {
+        items[key] ?? nil
     }
 }
-
-var hndlMap: HashMap<UnsafeMutableRawPointer, String> = .init()
-var impMap: HashMap<IMP, Any.Type> = .init()
-var voidMap: HashMap<UnsafeMutableRawPointer, Any.Type> = .init()

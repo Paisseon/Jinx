@@ -5,33 +5,33 @@ import MachO
 struct FishBones {
     // MARK: Internal
 
-    mutating func hook(
+    mutating func rebind(
         _ _symbol: String,
-        _ _image: String?,
-        _ _replacement: UnsafeRawPointer,
-        _ _orig: inout UnsafeMutableRawPointer?
-    ) -> Bool {
+        in _image: String?,
+        with _replacement: UnsafeRawPointer,
+        orig _orig: inout UnsafeMutableRawPointer?
+    ) -> JinxResult {
         symbol = _symbol
         replacement = _replacement
         orig = _orig
-
-        let index: UInt32 = _image == nil ? 1 : Array(0 ..< _dyld_image_count()).first(where: { i in
-            String(cString: _dyld_get_image_name(i)) == _image
-        }) ?? 0
-
-        guard index > 0,
-              let header: UnsafePointer<mach_header> = _dyld_get_image_header(index)
-        else {
-            return false
+        
+        let index: UInt32
+        
+        if _image == nil {
+            index = String(cString: _dyld_get_image_name(0)).contains("/usr/lib") ? 1 : 0
+        } else {
+            index = Array(0 ..< _dyld_image_count()).first(where: { i in
+                String(cString: _dyld_get_image_name(i)) == _image
+            }) ?? 1
         }
 
-        let machHeader: UnsafePointer<mach_header_64> = header.withMemoryRebound(
-            to: mach_header_64.self,
-            capacity: 1
-        ) { $0 }
-
+        guard let header: UnsafePointer<mach_header> = _dyld_get_image_header(index) else {
+            return .noHeader
+        }
+        
+        let machHeader: UnsafePointer<mach_header_64> = header.withMemoryRebound(to: mach_header_64.self, capacity: 1, { $0 })
         let slide: Int = _dyld_get_image_vmaddr_slide(index)
-        let ret: Bool = hookImage(machHeader, slide)
+        let ret: JinxResult = hookImage(with: machHeader, at: slide)
 
         _orig = orig
 
@@ -45,13 +45,13 @@ struct FishBones {
     private var orig: UnsafeMutableRawPointer?
 
     private mutating func hookImage(
-        _ header: UnsafePointer<mach_header_64>,
-        _ slide: Int
-    ) -> Bool {
+        with header: UnsafePointer<mach_header_64>,
+        at slide: Int
+    ) -> JinxResult {
         guard var loadCommand: UnsafeMutableRawPointer = .init(
             bitPattern: UInt(bitPattern: header) + UInt(MemoryLayout<mach_header_64>.size)
         ) else {
-            return false
+            return .noLoadCmd
         }
 
         var segmentCommand: UnsafeMutablePointer<segment_command_64>
@@ -59,7 +59,7 @@ struct FishBones {
         var symbolTableCommand: UnsafeMutablePointer<symtab_command>?
         var dySymTableCommand: UnsafeMutablePointer<dysymtab_command>?
 
-        for _: UInt32 in 0 ..< header.pointee.ncmds {
+        for _ in 0 ..< header.pointee.ncmds {
             segmentCommand = loadCommand.assumingMemoryBound(to: segment_command_64.self)
 
             if segmentCommand.pointee.cmd == LC_SEGMENT_64 {
@@ -79,7 +79,7 @@ struct FishBones {
               let symbolTableCommand,
               let dySymTableCommand
         else {
-            return false
+            return .noTableCmd
         }
 
         let linkeditBase: Int = slide + Int(linkeditCommand.pointee.vmaddr - linkeditCommand.pointee.fileoff)
@@ -95,16 +95,16 @@ struct FishBones {
                 bitPattern: linkeditBase + Int(dySymTableCommand.pointee.indirectsymoff)
             )
         else {
-            return false
+            return .noTable
         }
 
         guard var loadCommand: UnsafeMutableRawPointer = .init(
             bitPattern: UInt(bitPattern: header) + UInt(MemoryLayout<mach_header_64>.size)
         ) else {
-            return false
+            return .noLoadCmd
         }
 
-        for _: UInt32 in 0 ..< header.pointee.ncmds {
+        for _ in 0 ..< header.pointee.ncmds {
             segmentCommand = loadCommand.assumingMemoryBound(to: segment_command_64.self)
 
             if segmentCommand.pointee.cmd == LC_SEGMENT_64 {
@@ -135,11 +135,11 @@ struct FishBones {
                         (Int32(section.pointee.flags) & SECTION_TYPE) == S_NON_LAZY_SYMBOL_POINTERS
                     {
                         return replace(
-                            slide,
-                            section,
-                            symbolTable,
-                            stringTable,
-                            indirectSymbolTable
+                            at: slide,
+                            in: section,
+                            symbolTable: symbolTable,
+                            stringTable: stringTable,
+                            indirectSymbolTable: indirectSymbolTable
                         )
                     }
                 }
@@ -148,23 +148,23 @@ struct FishBones {
             loadCommand += Int(segmentCommand.pointee.cmdsize)
         }
 
-        return false
+        return .noData
     }
 
     private mutating func replace(
-        _ slide: Int,
-        _ section: UnsafeMutablePointer<section_64>,
-        _ symbolTable: UnsafeMutablePointer<nlist_64>,
-        _ stringTable: UnsafeMutablePointer<UInt8>,
-        _ indirectSymbolTable: UnsafeMutablePointer<UInt32>
-    ) -> Bool {
+        at slide: Int,
+        in section: UnsafeMutablePointer<section_64>,
+        symbolTable: UnsafeMutablePointer<nlist_64>,
+        stringTable: UnsafeMutablePointer<UInt8>,
+        indirectSymbolTable: UnsafeMutablePointer<UInt32>
+    ) -> JinxResult {
         let indices: UnsafeMutablePointer<UInt32> = indirectSymbolTable
             .advanced(by: Int(section.pointee.reserved1))
 
         guard let bindings: UnsafeMutablePointer<UnsafeMutableRawPointer> = .init(
             bitPattern: slide + Int(section.pointee.addr)
         ) else {
-            return false
+            return .noBind
         }
 
         guard vm_protect(
@@ -175,7 +175,7 @@ struct FishBones {
             VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY
         ) == KERN_SUCCESS
         else {
-            return false
+            return .readMem
         }
 
         for i: Int in 0 ..< Int(section.pointee.size) / MemoryLayout<UnsafeMutableRawPointer>.size {
@@ -203,10 +203,10 @@ struct FishBones {
                     .advanced(by: i)
                     .initialize(to: UnsafeMutableRawPointer(mutating: replacement))
 
-                return true
+                return .success
             }
         }
 
-        return false
+        return .noFunction
     }
 }
