@@ -1,4 +1,5 @@
-import Foundation
+import Darwin
+import Libhooker
 import MachO
 
 // MARK: - PowPow
@@ -9,31 +10,49 @@ struct PowPow {
     static var dyldMap: HashMap<String, UnsafeMutableRawPointer> = .init()
     static var origMap: HashMap<ObjectIdentifier, Pointer?> = .init()
 
-    // A simple version of MSHookMessageEx which works jailed
-    
     static func replace(
         _ _class: AnyClass,
         _ selector: Selector,
         with replacement: some Any,
-        orig _orig: inout OpaquePointer?
+        orig _orig: inout Pointer?
     ) -> JinxResult {
-        guard let imp: OpaquePointer = unsafeBitCast(replacement, to: OpaquePointer?.self),
-              let method: Method = class_getInstanceMethod(_class, selector),
-              let types: UnsafePointer<Int8> = method_getTypeEncoding(method)
-        else {
-            return .noSelector
+        var ret: JinxResult = .unknown
+        
+        if native.hasSuffix("libhooker.dylib") || native.hasSuffix("libellekit.dylib") {
+            guard let ptr: UnsafeMutableRawPointer = unsafeBitCast(replacement, to: UnsafeMutableRawPointer?.self) else {
+                return .badReplace
+            }
+            
+            var orig: UnsafeMutableRawPointer?
+            ret = libhookerMessage(_class, selector, with: ptr, orig: &orig)
+            
+            guard let orig else {
+                return .badOrig
+            }
+            
+            _orig = Pointer.raw(orig)
+        } else {
+            guard let ptr: OpaquePointer = unsafeBitCast(replacement, to: OpaquePointer?.self) else {
+                return .badReplace
+            }
+            
+            var orig: OpaquePointer?
+            
+            if native.isEmpty {
+                ret = internalMessage(_class, selector, with: ptr, orig: &orig)
+            } else {
+                ret = substrateMessage(_class, selector, with: ptr, orig: &orig)
+            }
+            
+            guard let orig else {
+                return .badOrig
+            }
+            
+            _orig = Pointer.opaque(orig)
         }
 
-        let orig: OpaquePointer = class_addMethod(_class, selector, imp, types) ?
-            method_getImplementation(method) :
-            method_setImplementation(method, imp)
-
-        _orig = orig
-        
-        return .success
+        return ret
     }
-    
-    // If A12+ and not using ElleKit, we rebind symbols with FishBones, otherwise use Substrate API
 
     static func replaceFunc(
         _ function: String,
@@ -41,17 +60,19 @@ struct PowPow {
         with replacement: UnsafeMutableRawPointer,
         orig _orig: inout UnsafeMutableRawPointer?
     ) -> JinxResult {
-        if native.isEmpty || isArm64e && native.hasSuffix("libellekit.dylib") {
+        if native.isEmpty || isArm64e && native.hasSuffix("CydiaSubstrate") || native.hasPrefix("@") {
             var fishBones: FishBones = .init()
-            return fishBones.rebind(function, in: image, with: replacement, orig: &_orig)
+            return fishBones.rebind(function, in: image ?? current, with: replacement, orig: &_orig)
         }
 
-        return branch(function, in: image, with: replacement, orig: &_orig)
+        if native.hasSuffix("libhooker.dylib") || native.hasSuffix("libellekit.dylib") {
+            return libhookerFunc(function, in: image, with: replacement, orig: &_orig)
+        } else {
+            return substrateFunc(function, in: image, with: replacement, orig: &_orig)
+        }
     }
 
     // MARK: Private
-
-    // If on arm64e and not using ElleKit, we must use rebinding instead of branching
 
     private static let isArm64e: Bool = {
         guard let archRaw = NXGetLocalArchInfo().pointee.name else {
@@ -61,83 +82,220 @@ struct PowPow {
         return strcasecmp(archRaw, "arm64e") == 0
     }()
 
-    // This is lazy so it only runs if HookFunc.hook() is called =)
+    // Get the path of the current hooking engine so we can get symbols from it
 
     private static let native: String = {
         var paths: [String] = [
             "/usr/lib/libellekit.dylib",
             "/usr/lib/libhooker.dylib",
-//            "/usr/lib/libsubstitute.dylib",
             "/Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate",
-            "@executable_path/Frameworks/CydiaSubstrate.framework/CydiaSubstrate"
+            "@executable_path/Frameworks/CydiaSubstrate.framework/CydiaSubstrate",
+            "@executable_path/Frameworks/libhooker.dylib",
         ]
-        
-        // Palera1n users-- switch to Kok3shi, it works on M1, is much more stable, functonal SEP, and has root
-        
+
         for path in paths {
             if !path.hasPrefix("@") {
-                paths.append(URL(fileURLWithPath: "/var/jb" + path).realURL().path)
+                var buffer: [Int8] = .init(repeating: 0, count: Int(PATH_MAX))
+                
+                if let result: UnsafeMutablePointer<Int8> = realpath("/var/jb" + path, &buffer) {
+                    paths.append(String(cString: result))
+                } else {
+                    paths.append("/var/jb" + path)
+                }
             }
         }
-        
+
         return paths.first(where: { path in
             access(path, F_OK) == 0
         }) ?? ""
     }()
 
-    // If we have a PAC bypass, use assembly branches (preferably ElleKit)
-    // Not included in Jinx itself because Jinx is static library, and I want it to be smol
+    // Get the current process as a backup if nil is passed as an argument for function hooks
 
-    // TODO: Add hooking for the Libhooker and Substitute APIs
+    private static let current: String = {
+        var buffer: [Int8] = .init(repeating: 0, count: Int(PATH_MAX))
+        var bufSize: UInt32 = 0
+        let _ = _NSGetExecutablePath(&buffer, &bufSize)
+        
+        return String(cString: buffer)
+    }()
 
-    private static func branch(
+    // Get and store symbols for external hooking engines (Libhooker, Substrate, etc.)
+
+    private static func symbol<T>(
+        _ sym: String,
+        in image: String? = nil
+    ) -> T? {
+        let thisImage: String = image ?? native
+        
+        if let handle: UnsafeMutableRawPointer = dyldMap.get(thisImage) {
+            guard let fnSym: T = unsafeBitCast(dlsym(handle, sym), to: T?.self) else {
+                dlclose(handle)
+                return nil
+            }
+
+            return fnSym
+        }
+
+        if let handle: UnsafeMutableRawPointer = dlopen(thisImage, RTLD_GLOBAL | RTLD_LAZY) {
+            guard let fnSym: T = unsafeBitCast(dlsym(handle, sym), to: T?.self) else {
+                dlclose(handle)
+                return nil
+            }
+
+            dyldMap.set(handle, for: thisImage)
+
+            return fnSym
+        }
+
+        return nil
+    }
+
+    // MARK: Libhooker API
+
+    private static func libhookerFunc(
         _ function: String,
         in image: String?,
         with replacement: UnsafeMutableRawPointer,
         orig _orig: inout UnsafeMutableRawPointer?
     ) -> JinxResult {
-        typealias MSFindSymbolType = @convention(c) (OpaquePointer?, UnsafePointer<Int8>) -> UnsafeMutableRawPointer?
-        typealias MSGetImageByNameType = @convention(c) (UnsafePointer<Int8>) -> OpaquePointer?
-        typealias MSHookFunctionType = @convention(c) (UnsafeMutableRawPointer, UnsafeMutableRawPointer, UnsafeMutablePointer<UnsafeMutableRawPointer?>) -> Void
-        
-        guard let MSFindSymbol: MSFindSymbolType = symbol("MSFindSymbol"),
-              let MSGetImageByName: MSGetImageByNameType = symbol("MSGetImageByName"),
-              let MSHookFunction: MSHookFunctionType = symbol("MSHookFunction"),
-              let sym: UnsafeMutableRawPointer = MSFindSymbol(MSGetImageByName(image ?? String(cString: _dyld_get_image_name(1))), function)
+        guard let LHOpenImage: LHOpenImageType = symbol("LHOpenImage"),
+              let LHCloseImage: LHCloseImageType = symbol("LHCloseImage"),
+              let LHFindSymbols: LHFindSymbolsType = symbol("LHFindSymbols"),
+              let LHHookFunctions: LHHookFunctionsType = symbol("LHHookFunctions")
         else {
+            return .noHookLib
+        }
+        
+        guard let lhImage: OpaquePointer = LHOpenImage(image ?? current) else {
+            return .noImage
+        }
+        
+        var searchSyms: [UnsafeMutableRawPointer?] = .init(repeating: nil, count: 1)
+        var symbolNames: UnsafePointer<Int8> = .init(strdup(function))
+        
+        if !LHFindSymbols(lhImage, &symbolNames, &searchSyms, 1) {
+            LHCloseImage(lhImage)
             return .noFunction
         }
         
+        var result: Int16 = 6
+        
+        withUnsafeMutablePointer(to: &_orig) { pointer in
+            var hook: LHFunctionHook = .init(
+                function: searchSyms[0],
+                replacement: replacement,
+                oldptr: pointer,
+                options: nil
+            )
+            
+            result = LHHookFunctions(&hook, 1)
+        }
+        
+        LHCloseImage(lhImage)
+        
+        return resolveLHError(result)
+    }
+    
+    private static func libhookerMessage(
+        _ _class: AnyClass,
+        _ selector: Selector,
+        with replacement: UnsafeMutableRawPointer,
+        orig _orig: inout UnsafeMutableRawPointer?
+    ) -> JinxResult {
+        let blackjackPath: String = native.dropLast(12).description + "blackjack.dylib"
+        
+        guard let LBHookMessage: LBHookMessageType = symbol("LBHookMessage", in: blackjackPath) else {
+            return .noHookLib
+        }
+        
+        let ret: Int16 = LBHookMessage(_class, selector, replacement, &_orig)
+        
+        return resolveLHError(ret)
+    }
+    
+    private static func resolveLHError(
+        _ err: Int16
+    ) -> JinxResult {
+        switch err {
+            case 0:
+                return .success
+            case 1:
+                return .noSelector
+            case 2:
+                return .shortFunc
+            case 3:
+                return .badInsn
+            case 4:
+                return .memPages
+            case 5:
+                return .noFunction
+            default:
+                return .unknown
+        }
+    }
+
+    // MARK: Substrate API
+
+    private static func substrateFunc(
+        _ function: String,
+        in image: String?,
+        with replacement: UnsafeMutableRawPointer,
+        orig _orig: inout UnsafeMutableRawPointer?
+    ) -> JinxResult {
+        guard let MSFindSymbol: MSFindSymbolType = symbol("MSFindSymbol"),
+              let MSGetImageByName: MSGetImageByNameType = symbol("MSGetImageByName"),
+              let MSHookFunction: MSHookFunctionType = symbol("MSHookFunction")
+        else {
+            return .noHookLib
+        }
+        
+        guard let sym: UnsafeMutableRawPointer = MSFindSymbol(MSGetImageByName(image ?? current), function) else {
+            return .noFunction
+        }
+
         MSHookFunction(sym, replacement, &_orig)
+
+        return .success
+    }
+    
+    private static func substrateMessage(
+        _ _class: AnyClass,
+        _ selector: Selector,
+        with replacement: OpaquePointer,
+        orig _orig: inout OpaquePointer?
+    ) -> JinxResult {
+        guard let MSHookMessageEx: MSHookMessageExType = symbol("MSHookMessageEx") else {
+            return .noHookLib
+        }
+        
+        MSHookMessageEx(_class, selector, replacement, &_orig)
         
         return .success
     }
     
-    // Get and store symbols for external hooking engines (ElleKit, Libhooker, etc.)
+    // MARK: Internal API
     
-    private static func symbol<T>(
-        _ sym: String
-    ) -> T? {
-        if let handle: UnsafeMutableRawPointer = dyldMap.get(native) {
-            guard let fnSym: T = unsafeBitCast(dlsym(handle, sym), to: T?.self) else {
-                dlclose(handle)
-                return nil
-            }
-            
-            return fnSym
+    static func internalMessage(
+        _ _class: AnyClass,
+        _ selector: Selector,
+        with replacement: OpaquePointer,
+        orig _orig: inout OpaquePointer?
+    ) -> JinxResult {
+        let getMethod = class_isMetaClass(_class) ? class_getClassMethod : class_getInstanceMethod
+
+        guard let method: Method = getMethod(_class, selector),
+              let types: UnsafePointer<Int8> = method_getTypeEncoding(method)
+        else {
+            return .noSelector
         }
-        
-        if let handle: UnsafeMutableRawPointer = dlopen(native, RTLD_GLOBAL | RTLD_LAZY) {
-            guard let fnSym: T = unsafeBitCast(dlsym(handle, sym), to: T?.self) else {
-                dlclose(handle)
-                return nil
-            }
-            
-            dyldMap.set(handle, for: native)
-            
-            return fnSym
-        }
-        
-        return nil
+
+        let orig: OpaquePointer = class_addMethod(_class, selector, replacement, types) ?
+            method_getImplementation(method) :
+            method_setImplementation(method, replacement)
+
+        _orig = orig
+
+        return .success
     }
 }

@@ -1,4 +1,4 @@
-import Foundation
+import ObjectiveC
 
 public protocol Hook {
     associatedtype T
@@ -9,22 +9,26 @@ public protocol Hook {
 }
 
 public extension Hook {
-    private static var _orig: OpaquePointer? {
+    private static var _orig: Pointer? {
         get {
-            if case .opaque(let ptr) = PowPow.origMap.get(ObjectIdentifier(Self.self)) {
-                return ptr
-            }
-            
-            return nil
+            PowPow.origMap.get(ObjectIdentifier(Self.self)) ?? nil
         }
         
         set {
-            PowPow.origMap.set(Pointer.opaque(newValue!), for: ObjectIdentifier(Self.self))
+            PowPow.origMap.set(newValue, for: ObjectIdentifier(Self.self))
         }
     }
     
     static var orig: T {
-        unsafeBitCast(_orig, to: T.self)
+        if case .raw(let ptr) = _orig {
+            return unsafeBitCast(ptr, to: T.self)
+        }
+        
+        if case .opaque(let ptr) = _orig {
+            return unsafeBitCast(ptr, to: T.self)
+        }
+        
+        return unsafeBitCast(_orig, to: T.self)
     }
     
     @discardableResult

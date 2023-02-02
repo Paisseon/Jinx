@@ -1,4 +1,4 @@
-import Foundation
+import ObjectiveC
 
 public struct Mouser {
     public static func setIvar<T>(

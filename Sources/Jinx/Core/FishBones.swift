@@ -7,7 +7,7 @@ struct FishBones {
 
     mutating func rebind(
         _ _symbol: String,
-        in _image: String?,
+        in _image: String,
         with _replacement: UnsafeRawPointer,
         orig _orig: inout UnsafeMutableRawPointer?
     ) -> JinxResult {
@@ -17,13 +17,9 @@ struct FishBones {
         
         let index: UInt32
         
-        if _image == nil {
-            index = String(cString: _dyld_get_image_name(0)).contains("/usr/lib") ? 1 : 0
-        } else {
-            index = Array(0 ..< _dyld_image_count()).first(where: { i in
-                String(cString: _dyld_get_image_name(i)) == _image
-            }) ?? 1
-        }
+        index = Array(0 ..< _dyld_image_count()).first(where: { i in
+            String(cString: _dyld_get_image_name(i)) == _image
+        }) ?? 1
 
         guard let header: UnsafePointer<mach_header> = _dyld_get_image_header(index) else {
             return .noHeader
@@ -43,6 +39,8 @@ struct FishBones {
     private var symbol: String!
     private var replacement: UnsafeRawPointer!
     private var orig: UnsafeMutableRawPointer?
+    
+    // Here be dragons
 
     private mutating func hookImage(
         with header: UnsafePointer<mach_header_64>,

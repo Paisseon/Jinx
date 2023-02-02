@@ -3,7 +3,7 @@
 
 import PackageDescription
 
-let package = Package(
+let package: Package = .init(
     name: "Jinx",
     products: [
         .library(
@@ -14,7 +14,9 @@ let package = Package(
     targets: [
         .target(
             name: "Jinx",
-            dependencies: []
+            swiftSettings: [
+                .unsafeFlags(["-I/Users/cupcake/theos/include"])
+            ]
         )
     ]
 )

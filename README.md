@@ -3,24 +3,26 @@
 
 This is a tool for tweak developers. Probably just me tbh, but others are welcome to use any or all of it they want. If you are an end user, this repo means nothing for you.
 
+Please note that this does require a macOS device with Xcode to compile. You’ll also need to run `make spm` and open the Package.swift file in Xcode at least once, as Jinx is distributed through SPM.
+
 ## Features
-- Hook ObjC messages, C functions, and ivars
+- Hook ObjC messages, C/C++/Swift functions, and ivars
 - Fearless speculative and dynamic hooking
-- Support for all hooking engines and jailbreaks
-- 100% pure Swift and Assembly
-- Works perfectly on jailed and rootless environments
+- Support for Libhooker, Substrate, and internal APIs
+- 100% Swift and ARM64 Assembly
+- Works on jailed devices without injecting Substrate
 - No preprocessor needed, you can use this in an app
 - Uses SPM for automatic (developer-end) updates
-- Fast, small, and lightweight (less than 1000 lines)
-- Read preferences from sandboxed processes
-- Two easy templates to use
+- Fast, small, and lightweight
+- Read preferences from sandboxed processes w/ Powder
+- Returns useful error codes for debugging
+- Two easy templates to use with Theos
 
 ## Installation
-1. Make sure that Theos is already installed
-2. Download the latest Jinx\_Installer.zip from Releases
+1. Make sure that Theos (Orion branch) is already installed
+2. Download the latest archive from Releases
 3. Extract and run `python3 install_jinx.py`
-4. Install [mryipc][1] if you want to use preferences
-5. Done!
+4. Done!
 
 ## Usage
 ### Hooking ObjC Messages
@@ -37,14 +39,14 @@ There is also one function which can be used.
 
 - **hook(onlyIf: Bool)**: `(Bool) -> Bool`. Returns true if the hook succeeds, and false if it fails. The onlyIf parameter defaults to true.
 
-## Hooking C Functions
-The HookFunc protocol is responsible for hooking C functions.
+## Hooking Functions
+The HookFunc protocol is responsible for hooking C, C++, and Swift functions.
 
 There are four immutable variables which you must define.
 
 - **T**: typealias for the signature of the hooked function. Must conform to the C convention.
-- **function**: `String`. The symbol of the function you will hook. Must have a leading underscore.
-- **image**: `String?`. The path to the image containing the target function. You may pass `nil` to access functions from the   shared cache.
+- **function**: `String`. The symbol of the function you will hook. Must have a leading underscore. For C++/Swift functions, use the mangled name.
+- **image**: `String?`. The path to the image containing the target function. You may pass `nil` to refer to the current process.
 - **replacement**: `T`. A closure which replaces the original code.
 
 There is also one function which can be used.
@@ -52,20 +54,14 @@ There is also one function which can be used.
 - **hook(onlyIf: Bool)**: `(Bool) -> Bool`. Returns true if the hook succeeds, and false if it fails. The onlyIf parameter defaults to true.
 
 ## Calling Original Code
-PowPow is used for abstracting the actual hooking so that you can just use Hook and HookFunc, but it also can get the original code (which is stored in HashMap)
+To call original implementation of a message or function, you can add `orig()` to your `replacement`. Just supply the arguments of the closure and you’re good to go.
 
-Just use `let orig: T = PowPow.orig(HookName.self)!`. It returns `T?`, which can be unwrapped and handled, or forcefully unwrapped. I opt for the latter, but the option is up to you.
+## Hooking Instance Variables
+To set an instance variable from inside a hook, you can use `Mouser.setIvar(_:for:to:)` with the name, object reference, and desired value.
 
-This is used for both messages and functions.
+You can also get the value of an instance variable with `Mouser.getIvar(_:for:)` with the name and object reference.
 
-## Hooking Ivars
-Mouser can set the values of ivars with the setIvar function.
+## Getting Preferences
+To get preferences, you will need to use the tweak\_swift\_jinx\_prefs template, which includes by default all the requisite code. 
 
-Just use `Mouser.setIvar(object:name:val:)` and pass the object reference, ivar name, and desired value.
-
-## Setting the Backend
-By default, Jinx uses a dynamic backend, which uses the native hooking engine or falls back to an internal hooking. However, you can set this manually with the PowPow.native variable, which is of type Hooker.
-
-Possible values are `.dynamic` (default), `.jinx`, `.libhooker`, `.substitute`, `.substrate`, and `.xina`.
-
-[1]:	https://github.com/Muirey03/MRYIPC "mryipc"
+In the Helpers/Preferences.swift file, you will see a variable `isEnabled`, just follow that pattern for assigning variables and change the Root.plist file in Resources folder accordingly.

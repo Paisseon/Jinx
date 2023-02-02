@@ -1,4 +1,5 @@
 public enum JinxResult {
+    case badInsn
     case badOrig
     case badReplace
     case noBind
@@ -6,19 +7,25 @@ public enum JinxResult {
     case noData
     case noFunction
     case noHeader
+    case noHookLib
     case noImage
     case noIvar
     case noLoadCmd
     case noSelector
     case noTable
     case noTableCmd
+    case memPages
     case readMem
+    case shortFunc
     case success
+    case unknown
 
     // MARK: Internal
 
-    var description: String {
+    public var description: String {
         switch self {
+            case .badInsn:
+                return "A bad instruction was found at the start of the function"
             case .badOrig:
                 return "Pointer to original function is corrupt"
             case .badReplace:
@@ -33,6 +40,8 @@ public enum JinxResult {
                 return "Symbol name not found in string table"
             case .noHeader:
                 return "Header not found for dyld index"
+            case .noHookLib:
+                return "Couldn't find requisite symbols in hooking library"
             case .noImage:
                 return "Image not found in process"
             case .noIvar:
@@ -45,10 +54,16 @@ public enum JinxResult {
                 return "No table found with table command"
             case .noTableCmd:
                 return "No table command found in Mach-O segments"
+            case .memPages:
+                return "An error occurred whilst handling memory pages"
             case .readMem:
                 return "Could not get write permission for memory"
+            case .shortFunc:
+                return "Function was too short to hook"
             case .success:
                 return "This was a triumph, I'm making a note here: HUGE SUCCESS"
+            case .unknown:
+                return "An unknown error. Spooky"
         }
     }
 }
