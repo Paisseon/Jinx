@@ -1,5 +1,4 @@
-import Darwin
-import Libhooker
+import ObjectiveC
 import MachO
 
 // MARK: - PowPow
@@ -58,17 +57,16 @@ struct PowPow {
         _ function: String,
         in image: String?,
         with replacement: UnsafeMutableRawPointer,
-        orig _orig: inout UnsafeMutableRawPointer?
+        orig: inout UnsafeMutableRawPointer?
     ) -> JinxResult {
         if native.isEmpty || isArm64e && native.hasSuffix("CydiaSubstrate") || native.hasPrefix("@") {
-            var fishBones: FishBones = .init()
-            return fishBones.rebind(function, in: image ?? current, with: replacement, orig: &_orig)
+            return FishBones.rebind(function, in: image ?? current, with: replacement, orig: &orig)
         }
 
         if native.hasSuffix("libhooker.dylib") || native.hasSuffix("libellekit.dylib") {
-            return libhookerFunc(function, in: image, with: replacement, orig: &_orig)
+            return libhookerFunc(function, in: image, with: replacement, orig: &orig)
         } else {
-            return substrateFunc(function, in: image, with: replacement, orig: &_orig)
+            return substrateFunc(function, in: image, with: replacement, orig: &orig)
         }
     }
 
@@ -91,17 +89,18 @@ struct PowPow {
             "/Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate",
             "@executable_path/Frameworks/CydiaSubstrate.framework/CydiaSubstrate",
             "@executable_path/Frameworks/libhooker.dylib",
+            "/var/jb/usr/lib/libellekit.dylib",
+            "/var/jb/Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate"
         ]
-
+        
+        // Resolve symlinks for rootless jailbreak
+        
         for path in paths {
-            if !path.hasPrefix("@") {
-                var buffer: [Int8] = .init(repeating: 0, count: Int(PATH_MAX))
-                
-                if let result: UnsafeMutablePointer<Int8> = realpath("/var/jb" + path, &buffer) {
-                    paths.append(String(cString: result))
-                } else {
-                    paths.append("/var/jb" + path)
-                }
+            var buffer: [Int8] = .init(repeating: 0, count: Int(PATH_MAX))
+            let destRes: Int = readlink(path, &buffer, buffer.count)
+            
+            if destRes != -1 {
+                paths.append(String(cString: buffer))
             }
         }
 
@@ -112,39 +111,44 @@ struct PowPow {
 
     // Get the current process as a backup if nil is passed as an argument for function hooks
 
-    private static let current: String = {
-        var buffer: [Int8] = .init(repeating: 0, count: Int(PATH_MAX))
-        var bufSize: UInt32 = 0
-        let _ = _NSGetExecutablePath(&buffer, &bufSize)
-        
-        return String(cString: buffer)
-    }()
+    private static let current: String = "/private" + CommandLine.arguments[0]
 
     // Get and store symbols for external hooking engines (Libhooker, Substrate, etc.)
 
     private static func symbol<T>(
         _ sym: String,
-        in image: String? = nil
+        in image: String = native
     ) -> T? {
-        let thisImage: String = image ?? native
+        // Check for cached symbol
         
-        if let handle: UnsafeMutableRawPointer = dyldMap.get(thisImage) {
-            guard let fnSym: T = unsafeBitCast(dlsym(handle, sym), to: T?.self) else {
-                dlclose(handle)
+        if let symPtr: UnsafeMutableRawPointer = dyldMap.get(sym) {
+            return unsafeBitCast(symPtr, to: T?.self)
+        }
+        
+        // Check for cached image
+        
+        if let imgPtr: UnsafeMutableRawPointer = dyldMap.get(image) {
+            let symPtr: UnsafeMutableRawPointer = dlsym(imgPtr, sym)
+            
+            dyldMap.set(symPtr, for: sym)
+            
+            guard let fnSym: T = unsafeBitCast(symPtr, to: T?.self) else {
+                dlclose(imgPtr)
                 return nil
             }
-
+            
             return fnSym
         }
-
-        if let handle: UnsafeMutableRawPointer = dlopen(thisImage, RTLD_GLOBAL | RTLD_LAZY) {
-            guard let fnSym: T = unsafeBitCast(dlsym(handle, sym), to: T?.self) else {
-                dlclose(handle)
-                return nil
-            }
-
-            dyldMap.set(handle, for: thisImage)
-
+        
+        // This is the first hook, so cache both image and symbol
+        
+        let imgPtr: UnsafeMutableRawPointer = dlopen(image, RTLD_GLOBAL | RTLD_LAZY)
+        let symPtr: UnsafeMutableRawPointer = dlsym(imgPtr, sym)
+        
+        dyldMap.set(imgPtr, for: image)
+        dyldMap.set(symPtr, for: sym)
+        
+        if let fnSym: T = unsafeBitCast(symPtr, to: T?.self) {
             return fnSym
         }
 
@@ -157,31 +161,45 @@ struct PowPow {
         _ function: String,
         in image: String?,
         with replacement: UnsafeMutableRawPointer,
-        orig _orig: inout UnsafeMutableRawPointer?
+        orig: inout UnsafeMutableRawPointer?
     ) -> JinxResult {
+        let msPath: String = "/Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate"
+        
         guard let LHOpenImage: LHOpenImageType = symbol("LHOpenImage"),
               let LHCloseImage: LHCloseImageType = symbol("LHCloseImage"),
               let LHFindSymbols: LHFindSymbolsType = symbol("LHFindSymbols"),
+              let MSFindSymbol: MSFindSymbolType = symbol("MSFindSymbol", in: msPath),
+              let MSGetImageByName: MSGetImageByNameType = symbol("MSGetImageByName", in: msPath),
               let LHHookFunctions: LHHookFunctionsType = symbol("LHHookFunctions")
         else {
             return .noHookLib
         }
         
-        guard let lhImage: OpaquePointer = LHOpenImage(image ?? current) else {
-            return .noImage
-        }
-        
+        var lhImage: OpaquePointer?
         var searchSyms: [UnsafeMutableRawPointer?] = .init(repeating: nil, count: 1)
         var symbolNames: UnsafePointer<Int8> = .init(strdup(function))
         
-        if !LHFindSymbols(lhImage, &symbolNames, &searchSyms, 1) {
-            LHCloseImage(lhImage)
+        if let _lhImage: OpaquePointer = LHOpenImage(image ?? current) {
+            lhImage = _lhImage
+            
+            if !LHFindSymbols(lhImage!, &symbolNames, &searchSyms, 1) {
+                LHCloseImage(lhImage)
+            }
+        } else {
+            if let sym: UnsafeMutableRawPointer = MSFindSymbol(MSGetImageByName(image ?? current), function) {
+                searchSyms[0] = sym
+            }
+        }
+        
+        guard searchSyms[0] != nil else {
             return .noFunction
         }
         
         var result: Int16 = 6
         
-        withUnsafeMutablePointer(to: &_orig) { pointer in
+        // How tf does this work? I really have no idea. It shouldn't work.
+        
+        withUnsafeMutablePointer(to: &orig) { pointer in
             var hook: LHFunctionHook = .init(
                 function: searchSyms[0],
                 replacement: replacement,
@@ -192,7 +210,9 @@ struct PowPow {
             result = LHHookFunctions(&hook, 1)
         }
         
-        LHCloseImage(lhImage)
+        if lhImage != nil {
+            LHCloseImage(lhImage)
+        }
         
         return resolveLHError(result)
     }
@@ -201,17 +221,13 @@ struct PowPow {
         _ _class: AnyClass,
         _ selector: Selector,
         with replacement: UnsafeMutableRawPointer,
-        orig _orig: inout UnsafeMutableRawPointer?
+        orig: inout UnsafeMutableRawPointer?
     ) -> JinxResult {
-        let blackjackPath: String = native.dropLast(12).description + "blackjack.dylib"
-        
-        guard let LBHookMessage: LBHookMessageType = symbol("LBHookMessage", in: blackjackPath) else {
+        guard let LBHookMessage: LBHookMessageType = symbol("LBHookMessage", in: "/usr/lib/libblackjack.dylib") else {
             return .noHookLib
         }
         
-        let ret: Int16 = LBHookMessage(_class, selector, replacement, &_orig)
-        
-        return resolveLHError(ret)
+        return resolveLHError(LBHookMessage(_class, selector, replacement, &orig))
     }
     
     private static func resolveLHError(
@@ -241,7 +257,7 @@ struct PowPow {
         _ function: String,
         in image: String?,
         with replacement: UnsafeMutableRawPointer,
-        orig _orig: inout UnsafeMutableRawPointer?
+        orig: inout UnsafeMutableRawPointer?
     ) -> JinxResult {
         guard let MSFindSymbol: MSFindSymbolType = symbol("MSFindSymbol"),
               let MSGetImageByName: MSGetImageByNameType = symbol("MSGetImageByName"),
@@ -254,7 +270,7 @@ struct PowPow {
             return .noFunction
         }
 
-        MSHookFunction(sym, replacement, &_orig)
+        MSHookFunction(sym, replacement, &orig)
 
         return .success
     }
@@ -263,13 +279,13 @@ struct PowPow {
         _ _class: AnyClass,
         _ selector: Selector,
         with replacement: OpaquePointer,
-        orig _orig: inout OpaquePointer?
+        orig: inout OpaquePointer?
     ) -> JinxResult {
         guard let MSHookMessageEx: MSHookMessageExType = symbol("MSHookMessageEx") else {
             return .noHookLib
         }
         
-        MSHookMessageEx(_class, selector, replacement, &_orig)
+        MSHookMessageEx(_class, selector, replacement, &orig)
         
         return .success
     }

@@ -13,10 +13,10 @@ let package: Package = .init(
     ],
     targets: [
         .target(
-            name: "Jinx"
-//            swiftSettings: [
+            name: "Jinx",
+            swiftSettings: [
 //                .unsafeFlags(["-I/Users/cupcake/theos/include"])
-//            ]
+            ]
         )
     ]
 )

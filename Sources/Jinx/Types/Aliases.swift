@@ -1,4 +1,4 @@
-import Libhooker
+import ObjectiveC
 
 // MARK: Libhooker API
 
@@ -10,7 +10,7 @@ typealias LBHookMessageType = @convention(c) (
 ) -> Int16
 
 typealias LHHookFunctionsType = @convention(c) (
-    UnsafePointer<LHFunctionHook>,
+    UnsafeMutableRawPointer,
     Int32
 ) -> Int16
 

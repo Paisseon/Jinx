@@ -5,21 +5,17 @@ import MachO
 struct FishBones {
     // MARK: Internal
 
-    mutating func rebind(
-        _ _symbol: String,
-        in _image: String,
-        with _replacement: UnsafeRawPointer,
-        orig _orig: inout UnsafeMutableRawPointer?
+    static func rebind(
+        _ symbol: String,
+        in image: String,
+        with replacement: UnsafeRawPointer,
+        orig: inout UnsafeMutableRawPointer?
     ) -> JinxResult {
-        symbol = _symbol
-        replacement = _replacement
-        orig = _orig
-        
-        let index: UInt32
-        
-        index = Array(0 ..< _dyld_image_count()).first(where: { i in
-            String(cString: _dyld_get_image_name(i)) == _image
-        }) ?? 1
+        guard let index: UInt32 = Array(0 ..< _dyld_image_count()).first(where: { i in
+            String(cString: _dyld_get_image_name(i)) == image
+        }) else {
+            return .noImage
+        }
 
         guard let header: UnsafePointer<mach_header> = _dyld_get_image_header(index) else {
             return .noHeader
@@ -27,24 +23,26 @@ struct FishBones {
         
         let machHeader: UnsafePointer<mach_header_64> = header.withMemoryRebound(to: mach_header_64.self, capacity: 1, { $0 })
         let slide: Int = _dyld_get_image_vmaddr_slide(index)
-        let ret: JinxResult = hookImage(with: machHeader, at: slide)
-
-        _orig = orig
-
-        return ret
+        
+        return hookImage(
+            with: machHeader,
+            at: slide,
+            symbol: symbol,
+            replacement: replacement,
+            orig: &orig
+        )
     }
 
     // MARK: Private
-
-    private var symbol: String!
-    private var replacement: UnsafeRawPointer!
-    private var orig: UnsafeMutableRawPointer?
     
     // Here be dragons
 
-    private mutating func hookImage(
+    private static func hookImage(
         with header: UnsafePointer<mach_header_64>,
-        at slide: Int
+        at slide: Int,
+        symbol: String,
+        replacement: UnsafeRawPointer,
+        orig: inout UnsafeMutableRawPointer?
     ) -> JinxResult {
         guard var loadCommand: UnsafeMutableRawPointer = .init(
             bitPattern: UInt(bitPattern: header) + UInt(MemoryLayout<mach_header_64>.size)
@@ -137,7 +135,10 @@ struct FishBones {
                             in: section,
                             symbolTable: symbolTable,
                             stringTable: stringTable,
-                            indirectSymbolTable: indirectSymbolTable
+                            indirectSymbolTable: indirectSymbolTable,
+                            symbol: symbol,
+                            replacement: replacement,
+                            orig: &orig
                         )
                     }
                 }
@@ -149,12 +150,15 @@ struct FishBones {
         return .noData
     }
 
-    private mutating func replace(
+    private static func replace(
         at slide: Int,
         in section: UnsafeMutablePointer<section_64>,
         symbolTable: UnsafeMutablePointer<nlist_64>,
         stringTable: UnsafeMutablePointer<UInt8>,
-        indirectSymbolTable: UnsafeMutablePointer<UInt32>
+        indirectSymbolTable: UnsafeMutablePointer<UInt32>,
+        symbol: String,
+        replacement: UnsafeRawPointer,
+        orig: inout UnsafeMutableRawPointer?
     ) -> JinxResult {
         let indices: UnsafeMutablePointer<UInt32> = indirectSymbolTable
             .advanced(by: Int(section.pointee.reserved1))
