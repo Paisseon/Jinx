@@ -6,7 +6,8 @@ struct PowPow {
     // MARK: Internal
 
     static var dyldMap: HashMap<String, UnsafeMutableRawPointer> = .init()
-    static var origMap: HashMap<ObjectIdentifier, Pointer?> = .init()
+    static var grupMap: HashMap<Int, any Groupable> = .init()
+    static var origMap: HashMap<Int, Pointer?> = .init()
 
     static func replace(
         _ _class: AnyClass,

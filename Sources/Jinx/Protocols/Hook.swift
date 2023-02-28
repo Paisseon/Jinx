@@ -11,11 +11,11 @@ public protocol Hook {
 public extension Hook {
     private static var _orig: Pointer? {
         get {
-            PowPow.origMap.get(ObjectIdentifier(Self.self)) ?? nil
+            PowPow.origMap.get(ObjectIdentifier(Self.self).hashValue) ?? nil
         }
         
         set {
-            PowPow.origMap.set(newValue, for: ObjectIdentifier(Self.self))
+            PowPow.origMap.set(newValue, for: ObjectIdentifier(Self.self).hashValue)
         }
     }
     
@@ -42,5 +42,14 @@ public extension Hook {
         }
         
         return PowPow.replace(`class`, selector, with: replacement, orig: &Self._orig)
+    }
+    
+    @discardableResult
+    func unhook() -> JinxResult {
+        guard let `class` else {
+            return .noClass
+        }
+        
+        return PowPow.replace(`class`, selector, with: Self.orig, orig: &Self._orig)
     }
 }

@@ -9,11 +9,11 @@ public protocol HookFunc {
 public extension HookFunc {
     private static var _orig: Pointer? {
         get {
-            PowPow.origMap.get(ObjectIdentifier(Self.self)) ?? nil
+            PowPow.origMap.get(ObjectIdentifier(Self.self).hashValue) ?? nil
         }
         
         set {
-            PowPow.origMap.set(newValue, for: ObjectIdentifier(Self.self))
+            PowPow.origMap.set(newValue, for: ObjectIdentifier(Self.self).hashValue)
         }
     }
     
@@ -32,6 +32,22 @@ public extension HookFunc {
         guard condition,
               let replacementPtr: UnsafeMutableRawPointer = unsafeBitCast(replacement, to: UnsafeMutableRawPointer?.self)
         else {
+            return .noFunction
+        }
+        
+        var tmp: UnsafeMutableRawPointer?
+        let ret: JinxResult = PowPow.replaceFunc(function, in: image, with: replacementPtr, orig: &tmp)
+        
+        if let tmp {
+            Self._orig = .raw(tmp)
+        }
+        
+        return ret
+    }
+    
+    @discardableResult
+    func unhook() -> JinxResult {
+        guard let replacementPtr: UnsafeMutableRawPointer = unsafeBitCast(Self.orig, to: UnsafeMutableRawPointer?.self) else {
             return .noFunction
         }
         
