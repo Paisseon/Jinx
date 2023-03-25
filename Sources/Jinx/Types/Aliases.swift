@@ -1,16 +1,14 @@
-import ObjectiveC
+//
+//  Aliases.swift
+//  Jinx
+//
+//  Created by Lilliana on 21/03/2023.
+//
 
 // MARK: Libhooker API
 
-typealias LBHookMessageType = @convention(c) (
-    AnyClass,
-    Selector,
-    UnsafeMutableRawPointer,
-    UnsafeMutableRawPointer?
-) -> Int16
-
 typealias LHHookFunctionsType = @convention(c) (
-    UnsafeMutableRawPointer,
+    UnsafeRawPointer,
     Int32
 ) -> Int16
 
@@ -41,14 +39,7 @@ typealias MSGetImageByNameType = @convention(c) (
 ) -> OpaquePointer?
 
 typealias MSHookFunctionType = @convention(c) (
-    UnsafeMutableRawPointer,
-    UnsafeMutableRawPointer,
+    UnsafeRawPointer,
+    UnsafeRawPointer,
     UnsafeMutablePointer<UnsafeMutableRawPointer?>
-) -> Void
-
-typealias MSHookMessageExType = @convention(c) (
-    AnyClass,
-    Selector,
-    OpaquePointer,
-    UnsafeMutablePointer<OpaquePointer?>
 ) -> Void

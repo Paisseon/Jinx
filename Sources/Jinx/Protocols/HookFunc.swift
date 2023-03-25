@@ -1,63 +1,50 @@
+//
+//  HookFunc.swift
+//  Jinx
+//
+//  Created by Lilliana on 25/03/2023.
+//
+
+public typealias HookF = HookFunc
+
 public protocol HookFunc {
     associatedtype T
     
-    var function: String { get }
+    var name: String { get }
     var image: String? { get }
-    var replacement: T { get }
+    var replace: T { get }
 }
 
 public extension HookFunc {
+    private static var uuid: Int {
+        ObjectIdentifier(Self.self).hashValue
+    }
+    
     private static var _orig: Pointer? {
-        get {
-            PowPow.origMap.get(ObjectIdentifier(Self.self).hashValue) ?? nil
-        }
-        
-        set {
-            PowPow.origMap.set(newValue, for: ObjectIdentifier(Self.self).hashValue)
-        }
+        get { Storage.getOrig(for: Self.uuid) }
+        set { Storage.setOrig(newValue, for: Self.uuid) }
     }
     
     static var orig: T {
-        if case .raw(let ptr) = _orig {
-            return unsafeBitCast(ptr, to: T.self)
-        }
-        
+        if case .raw(let ptr) = _orig { return ptr.assumingMemoryBound(to: T.self).pointee }
         return unsafeBitCast(_orig, to: T.self)
     }
     
     @discardableResult
     func hook(
         onlyIf condition: Bool = true
-    ) -> JinxResult {
-        guard condition,
-              let replacementPtr: UnsafeMutableRawPointer = unsafeBitCast(replacement, to: UnsafeMutableRawPointer?.self)
-        else {
-            return .noFunction
+    ) -> Bool {
+        guard condition else {
+            return false
         }
         
-        var tmp: UnsafeMutableRawPointer?
-        let ret: JinxResult = PowPow.replaceFunc(function, in: image, with: replacementPtr, orig: &tmp)
-        
-        if let tmp {
-            Self._orig = .raw(tmp)
-        }
-        
-        return ret
+        let ext: External = .init(name: name, image: image, replacement: withUnsafePointer(to: replace, { UnsafeRawPointer($0) }))
+        return ext.hookFunc(orig: &Self._orig)
     }
     
     @discardableResult
-    func unhook() -> JinxResult {
-        guard let replacementPtr: UnsafeMutableRawPointer = unsafeBitCast(Self.orig, to: UnsafeMutableRawPointer?.self) else {
-            return .noFunction
-        }
-        
-        var tmp: UnsafeMutableRawPointer?
-        let ret: JinxResult = PowPow.replaceFunc(function, in: image, with: replacementPtr, orig: &tmp)
-        
-        if let tmp {
-            Self._orig = .raw(tmp)
-        }
-        
-        return ret
+    func unhook() -> Bool {
+        let ext: External = .init(name: name, image: image, replacement: withUnsafePointer(to: Self.orig, { UnsafeRawPointer($0) }))
+        return ext.hookFunc(orig: &Self._orig)
     }
 }
