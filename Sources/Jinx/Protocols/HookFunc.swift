@@ -5,8 +5,6 @@
 //  Created by Lilliana on 25/03/2023.
 //
 
-public typealias HookF = HookFunc
-
 public protocol HookFunc {
     associatedtype T
     
@@ -20,31 +18,22 @@ public extension HookFunc {
         ObjectIdentifier(Self.self).hashValue
     }
     
-    private static var _orig: Pointer? {
-        get { Storage.getOrig(for: Self.uuid) }
-        set { Storage.setOrig(newValue, for: Self.uuid) }
+    private static var _orig: UnsafeMutableRawPointer? {
+        get { Storage.getOrigRaw(for: Self.uuid) }
+        set { Storage.setOrigRaw(newValue, for: Self.uuid) }
     }
     
     static var orig: T {
-        if case .raw(let ptr) = _orig { return ptr.assumingMemoryBound(to: T.self).pointee }
-        return unsafeBitCast(_orig, to: T.self)
+        _orig!.assumingMemoryBound(to: T.self).pointee
     }
     
     @discardableResult
-    func hook(
-        onlyIf condition: Bool = true
-    ) -> Bool {
-        guard condition else {
-            return false
-        }
-        
-        let ext: External = .init(name: name, image: image, replacement: withUnsafePointer(to: replace, { UnsafeRawPointer($0) }))
-        return ext.hookFunc(orig: &Self._orig)
+    func hook() -> Bool {
+        External(name: name, image: image, replacement: unsafeBitCast(replace, to: UnsafeRawPointer.self)).hookFunc(orig: &Self._orig)
     }
     
     @discardableResult
     func unhook() -> Bool {
-        let ext: External = .init(name: name, image: image, replacement: withUnsafePointer(to: Self.orig, { UnsafeRawPointer($0) }))
-        return ext.hookFunc(orig: &Self._orig)
+        External(name: name, image: image, replacement: Self._orig!).hookFunc(orig: &Self._orig)
     }
 }

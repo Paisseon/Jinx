@@ -24,12 +24,4 @@ struct Lock {
         defer { os_unfair_lock_unlock(lock) }
         return try fn()
     }
-    
-    func assertOwned() {
-        os_unfair_lock_assert_owner(lock)
-    }
-    
-    func assertUnowned() {
-        os_unfair_lock_assert_not_owner(lock)
-    }
 }

@@ -20,27 +20,22 @@ public extension Hook {
         ObjectIdentifier(Self.self).hashValue
     }
     
-    private static var _orig: Pointer? {
-        get { Storage.getOrig(for: Self.uuid) }
-        set { Storage.setOrig(newValue, for: Self.uuid) }
+    private static var _orig: OpaquePointer? {
+        get { Storage.getOrigOpaque(for: Self.uuid) }
+        set { Storage.setOrigOpaque(newValue, for: Self.uuid) }
     }
     
     static var orig: T {
-        if case .opaque(let ptr) = _orig { return UnsafeRawPointer(ptr).bindMemory(to: T.self, capacity: 1).pointee }
-        return unsafeBitCast(_orig, to: T.self)
+        unsafeBitCast(_orig, to: T.self)
     }
     
     @discardableResult
-    func hook(
-        onlyIf condition: Bool = true
-    ) -> Bool {
-        guard condition,
-              let cls
-        else {
+    func hook() -> Bool {
+        guard let cls else {
             return false
         }
         
-        return Replace.message(cls, sel, with: withUnsafePointer(to: replace, { OpaquePointer($0) }), orig: &Self._orig)
+        return Replace.message(cls, sel, with: unsafeBitCast(replace, to: OpaquePointer.self), orig: &Self._orig)
     }
     
     @discardableResult
@@ -49,6 +44,6 @@ public extension Hook {
             return false
         }
         
-        return Replace.message(cls, sel, with: withUnsafePointer(to: Self.orig, { OpaquePointer($0) }), orig: &Self._orig)
+        return Replace.message(cls, sel, with: Self._orig!, orig: &Self._orig)
     }
 }

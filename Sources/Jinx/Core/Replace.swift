@@ -12,7 +12,7 @@ struct Replace {
         _ cls: AnyClass,
         _ sel: Selector,
         with replacement: OpaquePointer,
-        orig: inout Pointer?
+        orig: inout OpaquePointer?
     ) -> Bool {
         let getMethod = class_isMetaClass(cls) ? class_getClassMethod : class_getInstanceMethod
         
@@ -29,7 +29,7 @@ struct Replace {
             method_getImplementation(method) :
             method_setImplementation(method, replacement)
             
-            orig = Pointer.opaque(_orig)
+            orig = _orig
         }
         
         return true

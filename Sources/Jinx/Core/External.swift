@@ -9,54 +9,47 @@ import Darwin.C
 import MachO
 
 struct External {
+    // MARK: Internal
+
     let name: String
     let image: String?
     let replacement: UnsafeRawPointer
-    
+
     func hookFunc(
-        orig: inout Pointer?
+        orig: inout UnsafeMutableRawPointer?
     ) -> Bool {
-        let result: Bool
-        var _orig: UnsafeMutableRawPointer?
-        
         if hookingLibrary.hasSuffix("libellekit.dylib") || hookingLibrary.hasSuffix("libhooker.dylib") {
-            result = lh_hookFunc(orig: &_orig)
+            return lh_hookFunc(orig: &orig)
         } else if hookingLibrary.hasSuffix("libsubstrate.dylib") {
-            result = ss_hookFunc(orig: &_orig)
+            return ss_hookFunc(orig: &orig)
         } else {
-            let rebinder: Rebind = .init(image: image ?? currentImage, symbol: name, replacement: replacement)
-            result = rebinder.rebind(storingOrig: &_orig)
+            return Rebind(image: image ?? currentImage, symbol: name, replacement: replacement).rebind(storingOrig: &orig)
         }
-        
-        guard let _orig else {
-            return false
-        }
-        
-        orig = Pointer.raw(_orig)
-        return result
     }
-    
+
+    // MARK: Private
+
     private let currentImage: String = "/private" + CommandLine.arguments[0]
     private let hookingLibrary: String = {
         let parts: [String] = String(cString: _dyld_get_image_name(0)).split(separator: "/").map { String($0) }
-        
+
         guard let endPart: String = parts.last else {
             return ""
         }
-        
+
         if strstr(endPart, "substi") != nil {
-            return parts.dropLast().joined(separator: "/") + "libsubstrate.dylib"
+            return parts.dropLast().joined(separator: "/") + "/libsubstrate.dylib"
         } else if strstr(endPart, "libho") != nil {
-            return parts.dropLast().joined(separator: "/") + "libhooker.dylib"
+            return parts.dropLast().joined(separator: "/") + "/libhooker.dylib"
         } else if strstr(endPart, "ellek") != nil {
-            return parts.dropLast().joined(separator: "/") + "libellekit.dylib"
+            return parts.dropLast().joined(separator: "/") + "/libellekit.dylib"
         }
-        
+
         return ""
     }()
-    
+
     // Hook a function using Substrate API
-    
+
     private func ss_hookFunc(
         orig: inout UnsafeMutableRawPointer?
     ) -> Bool {
@@ -67,14 +60,14 @@ struct External {
         else {
             return false
         }
-        
+
         MSHookFunction(sym, replacement, &orig)
-        
+
         return true
     }
-    
+
     // Hook a function using Libhooker API
-    
+
     private func lh_hookFunc(
         orig: inout UnsafeMutableRawPointer?
     ) -> Bool {
@@ -86,17 +79,17 @@ struct External {
         else {
             return false
         }
-        
+
         var searchSyms: [UnsafeMutableRawPointer?] = .init(repeating: nil, count: 1)
         var symbolNames: UnsafePointer<Int8> = .init(strdup(name))
-        
+
         guard LHFindSymbols(lhImage, &symbolNames, &searchSyms, 1) else {
             LHCloseImage(lhImage)
             return false
         }
-        
+
         var result: Int16 = 1
-        
+
         withUnsafeMutablePointer(to: &orig) { pointer in
             var hook: LHFunctionHook = .init(
                 function: searchSyms[0],
@@ -104,10 +97,10 @@ struct External {
                 oldptr: pointer,
                 options: nil
             )
-            
+
             result = LHHookFunctions(&hook, 1)
         }
-        
+
         LHCloseImage(lhImage)
         return result == 0
     }

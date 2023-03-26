@@ -8,35 +8,33 @@
 import Darwin.C
 
 struct Storage {
-    private static var libSymbols: [String: UnsafeMutableRawPointer] = [:]
-    private static var libImages: [String: UnsafeMutableRawPointer] = [:]
-    private static var origs: [Int: Pointer?] = [:]
-    
-    private static let lock: Lock = .init()
-    
+    // MARK: Internal
+
     static func getSymbol<T>(
         named symbol: String,
         in image: String
     ) -> T? {
         if let symPtr: UnsafeMutableRawPointer = libSymbols[symbol] {
-            return symPtr.assumingMemoryBound(to: T?.self).pointee
+            return unsafeBitCast(symPtr, to: T?.self) // symPtr.assumingMemoryBound(to: T?.self).pointee
         }
-        
+
         let imgPtr: UnsafeMutableRawPointer
-        
+
         if let _imgPtr: UnsafeMutableRawPointer = libImages[image] {
             imgPtr = _imgPtr
-        } else {
-            imgPtr = dlopen(image, RTLD_LAZY)
+        } else if let _imgPtr = dlopen(image, RTLD_LAZY) {
+            imgPtr = _imgPtr
             libImages[image] = imgPtr
+        } else {
+            return nil
         }
-        
+
         let symPtr: UnsafeMutableRawPointer = dlsym(imgPtr, symbol)
         libSymbols[symbol] = symPtr
-        
-        return symPtr.assumingMemoryBound(to: T?.self).pointee
+
+        return unsafeBitCast(symPtr, to: T?.self) // symPtr.assumingMemoryBound(to: T?.self).pointee
     }
-    
+
     static func removeImage(
         named image: String
     ) {
@@ -44,19 +42,43 @@ struct Storage {
             dlclose(handle)
         }
     }
-    
-    static func getOrig(
+
+    static func getOrigOpaque(
         for id: Int
-    ) -> Pointer? {
-        origs[id] ?? nil
+    ) -> OpaquePointer? {
+        origsOpaque[id] ?? nil
     }
-    
-    static func setOrig(
-        _ ptr: Pointer?,
+
+    static func setOrigOpaque(
+        _ ptr: OpaquePointer?,
         for id: Int
     ) {
         lock.locked {
-            origs[id] = ptr
+            origsOpaque[id] = ptr
         }
     }
+
+    static func getOrigRaw(
+        for id: Int
+    ) -> UnsafeMutableRawPointer? {
+        origsRaw[id] ?? nil
+    }
+
+    static func setOrigRaw(
+        _ ptr: UnsafeMutableRawPointer?,
+        for id: Int
+    ) {
+        lock.locked {
+            origsRaw[id] = ptr
+        }
+    }
+
+    // MARK: Private
+
+    private static var libSymbols: [String: UnsafeMutableRawPointer] = [:]
+    private static var libImages: [String: UnsafeMutableRawPointer] = [:]
+    private static var origsOpaque: [Int: OpaquePointer?] = [:]
+    private static var origsRaw: [Int: UnsafeMutableRawPointer?] = [:]
+
+    private static let lock: Lock = .init()
 }
