@@ -15,7 +15,7 @@ struct Storage {
         in image: String
     ) -> T? {
         if let symPtr: UnsafeMutableRawPointer = libSymbols[symbol] {
-            return unsafeBitCast(symPtr, to: T?.self) // symPtr.assumingMemoryBound(to: T?.self).pointee
+            return unsafeBitCast(symPtr, to: T?.self)
         }
 
         let imgPtr: UnsafeMutableRawPointer
@@ -32,7 +32,7 @@ struct Storage {
         let symPtr: UnsafeMutableRawPointer = dlsym(imgPtr, symbol)
         libSymbols[symbol] = symPtr
 
-        return unsafeBitCast(symPtr, to: T?.self) // symPtr.assumingMemoryBound(to: T?.self).pointee
+        return unsafeBitCast(symPtr, to: T?.self)
     }
 
     static func removeImage(
@@ -79,6 +79,5 @@ struct Storage {
     private static var libImages: [String: UnsafeMutableRawPointer] = [:]
     private static var origsOpaque: [Int: OpaquePointer?] = [:]
     private static var origsRaw: [Int: UnsafeMutableRawPointer?] = [:]
-
     private static let lock: Lock = .init()
 }

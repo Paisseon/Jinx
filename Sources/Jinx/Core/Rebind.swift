@@ -12,7 +12,7 @@ struct Rebind {
 
     let image: String
     let symbol: String
-    let replacement: UnsafeRawPointer
+    let replace: UnsafeRawPointer
 
     func rebind(
         storingOrig orig: inout UnsafeMutableRawPointer?
@@ -36,6 +36,8 @@ struct Rebind {
     }
 
     // MARK: Private
+    
+    private let lock: Lock = .init()
 
     private func getTable(
         at slide: Int,
@@ -151,11 +153,10 @@ struct Rebind {
         for i: Int in 0 ..< Int(table.sect.pointee.size) / MemoryLayout<UnsafeMutableRawPointer>.size {
             let inSym: UnsafeMutablePointer<UInt32> = indices.advanced(by: i)
 
-            guard ![
-                UInt32(INDIRECT_SYMBOL_ABS),
-                INDIRECT_SYMBOL_LOCAL,
-                INDIRECT_SYMBOL_LOCAL | UInt32(INDIRECT_SYMBOL_ABS)
-            ].contains(inSym.pointee) else {
+            guard inSym.pointee != UInt32(INDIRECT_SYMBOL_ABS),
+                  inSym.pointee != INDIRECT_SYMBOL_LOCAL,
+                  inSym.pointee != INDIRECT_SYMBOL_LOCAL | UInt32(INDIRECT_SYMBOL_ABS)
+            else {
                 continue
             }
 
@@ -166,11 +167,9 @@ struct Rebind {
                 .n_strx
 
             if String(cString: table.str.advanced(by: Int(strTabOff))) == symbol {
-                let lock: Lock = .init()
-                
                 lock.locked {
                     orig = bindings.advanced(by: i).pointee
-                    bindings.advanced(by: i).initialize(to: .init(mutating: replacement))
+                    bindings.advanced(by: i).initialize(to: .init(mutating: replace))
                 }
 
                 return true

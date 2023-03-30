@@ -11,77 +11,92 @@ import MachO
 struct External {
     // MARK: Internal
 
-    let name: String
+    let symbol: String
     let image: String?
-    let replacement: UnsafeRawPointer
+    let replace: UnsafeRawPointer
 
     func hookFunc(
         orig: inout UnsafeMutableRawPointer?
     ) -> Bool {
-        if hookingLibrary.hasSuffix("libellekit.dylib") || hookingLibrary.hasSuffix("libhooker.dylib") {
-            return lh_hookFunc(orig: &orig)
-        } else if hookingLibrary.hasSuffix("libsubstrate.dylib") {
-            return ss_hookFunc(orig: &orig)
-        } else {
-            return Rebind(image: image ?? currentImage, symbol: name, replacement: replacement).rebind(storingOrig: &orig)
+        switch Self.hookLibID {
+            case .apple:
+                return Rebind(image: image ?? Self.currentImage, symbol: symbol, replace: replace).rebind(storingOrig: &orig)
+            case .ellekit, .libhooker:
+                return lh_hookFunc(orig: &orig)
+            case .substitute:
+                return ss_hookFunc(orig: &orig)
         }
     }
 
     // MARK: Private
 
-    private let currentImage: String = "/private" + CommandLine.arguments[0]
-    private let hookingLibrary: String = {
+    private typealias CharPtrPtr = UnsafeMutablePointer<UnsafePointer<Int8>>
+    private typealias VoidPtrPtr = UnsafeMutablePointer<UnsafeMutableRawPointer?>
+    private static let currentImage: String = "/private" + CommandLine.arguments[0]
+    private static var hookLibID: HookLib = .apple
+    
+    private static let hookLib: String = {
         let parts: [String] = String(cString: _dyld_get_image_name(0)).split(separator: "/").map { String($0) }
-
-        guard let endPart: String = parts.last else {
-            return ""
+        
+        switch parts.last {
+            case "libinjector.dylib":
+                hookLibID = .ellekit
+                return parts.dropLast(2).joined(separator: "/") + "/libellekit.dylib"
+            case "substitute-loader.dylib":
+                hookLibID = .substitute
+                return parts.dropLast().joined(separator: "/") + "/libsubstrate.dylib"
+            case "TweakInject.dylib":
+                hookLibID = .libhooker
+                return parts.dropLast().joined(separator: "/") + "/libhooker.dylib"
+            default:
+                hookLibID = .apple
+                return ""
         }
-
-        if strstr(endPart, "substi") != nil {
-            return parts.dropLast().joined(separator: "/") + "/libsubstrate.dylib"
-        } else if strstr(endPart, "libho") != nil {
-            return parts.dropLast().joined(separator: "/") + "/libhooker.dylib"
-        } else if strstr(endPart, "ellek") != nil {
-            return parts.dropLast().joined(separator: "/") + "/libellekit.dylib"
-        }
-
-        return ""
     }()
 
-    // Hook a function using Substrate API
+    // MARK: Substrate API
+
+    private typealias MSFindSymbolType = @convention(c) (OpaquePointer?, UnsafePointer<Int8>) -> UnsafeMutableRawPointer?
+    private typealias MSGetImageByNameType = @convention(c) (UnsafePointer<Int8>) -> OpaquePointer?
+    private typealias MSHookFunctionType = @convention(c) (UnsafeRawPointer, UnsafeRawPointer, VoidPtrPtr) -> Void
 
     private func ss_hookFunc(
         orig: inout UnsafeMutableRawPointer?
     ) -> Bool {
-        guard let MSFindSymbol: MSFindSymbolType = Storage.getSymbol(named: "MSFindSymbol", in: hookingLibrary),
-              let MSGetImageByName: MSGetImageByNameType = Storage.getSymbol(named: "MSGetImageByName", in: hookingLibrary),
-              let MSHookFunction: MSHookFunctionType = Storage.getSymbol(named: "MSHookFunction", in: hookingLibrary),
-              let sym: UnsafeMutableRawPointer = MSFindSymbol(MSGetImageByName(image ?? currentImage), name)
+        guard let MSFindSymbol: MSFindSymbolType = Storage.getSymbol(named: "MSFindSymbol", in: Self.hookLib),
+              let MSGetImageByName: MSGetImageByNameType = Storage.getSymbol(named: "MSGetImageByName", in: Self.hookLib),
+              let MSHookFunction: MSHookFunctionType = Storage.getSymbol(named: "MSHookFunction", in: Self.hookLib),
+              let sym: UnsafeMutableRawPointer = MSFindSymbol(MSGetImageByName(image ?? Self.currentImage), "_" + symbol)
         else {
             return false
         }
 
-        MSHookFunction(sym, replacement, &orig)
+        MSHookFunction(sym, replace, &orig)
 
         return true
     }
-
-    // Hook a function using Libhooker API
+    
+    // MARK: Libhooker API
+    
+    private typealias LHHookFunctionsType = @convention(c) (UnsafeRawPointer, Int32) -> Int16
+    private typealias LHOpenImageType = @convention(c) (UnsafePointer<Int8>) -> OpaquePointer?
+    private typealias LHCloseImageType = @convention(c) (OpaquePointer?) -> Void
+    private typealias LHFindSymbolsType = @convention(c) (OpaquePointer, CharPtrPtr, VoidPtrPtr, Int ) -> Bool
 
     private func lh_hookFunc(
         orig: inout UnsafeMutableRawPointer?
     ) -> Bool {
-        guard let LHCloseImage: LHCloseImageType = Storage.getSymbol(named: "LHCloseImage", in: hookingLibrary),
-              let LHFindSymbols: LHFindSymbolsType = Storage.getSymbol(named: "LHFindSymbols", in: hookingLibrary),
-              let LHHookFunctions: LHHookFunctionsType = Storage.getSymbol(named: "LHHookFunctions", in: hookingLibrary),
-              let LHOpenImage: LHOpenImageType = Storage.getSymbol(named: "LHOpenImage", in: hookingLibrary),
-              let lhImage: OpaquePointer = LHOpenImage(image ?? currentImage)
+        guard let LHCloseImage: LHCloseImageType = Storage.getSymbol(named: "LHCloseImage", in: Self.hookLib),
+              let LHFindSymbols: LHFindSymbolsType = Storage.getSymbol(named: "LHFindSymbols", in: Self.hookLib),
+              let LHHookFunctions: LHHookFunctionsType = Storage.getSymbol(named: "LHHookFunctions", in: Self.hookLib),
+              let LHOpenImage: LHOpenImageType = Storage.getSymbol(named: "LHOpenImage", in: Self.hookLib),
+              let lhImage: OpaquePointer = LHOpenImage(image ?? Self.currentImage)
         else {
             return false
         }
 
         var searchSyms: [UnsafeMutableRawPointer?] = .init(repeating: nil, count: 1)
-        var symbolNames: UnsafePointer<Int8> = .init(strdup(name))
+        var symbolNames: UnsafePointer<Int8> = .init(strdup("_" + symbol))
 
         guard LHFindSymbols(lhImage, &symbolNames, &searchSyms, 1) else {
             LHCloseImage(lhImage)
@@ -93,7 +108,7 @@ struct External {
         withUnsafeMutablePointer(to: &orig) { pointer in
             var hook: LHFunctionHook = .init(
                 function: searchSyms[0],
-                replacement: replacement,
+                replacement: replace,
                 oldptr: pointer,
                 options: nil
             )

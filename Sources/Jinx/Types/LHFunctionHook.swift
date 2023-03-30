@@ -1,5 +1,5 @@
 //
-//  Libhooker.swift
+//  LHFunctionHook.swift
 //  Jinx
 //
 //  Created by Lilliana on 21/03/2023.
