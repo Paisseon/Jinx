@@ -58,11 +58,12 @@ struct Rebind {
         for _ in 0 ..< header.pointee.ncmds {
             segCmd = lc.assumingMemoryBound(to: segment_command_64.self)
 
-            switch Int32(segCmd.pointee.cmd) {
-                case LC_SEGMENT_64:
+            switch segCmd.pointee.cmd {
+                case UInt32(LC_SEGMENT_64):
                     if strcmp(&segCmd.pointee.segname, SEG_LINKEDIT) == 0 {
                         ledCmd = segCmd
                     } else {
+                        
                         let seg: UnsafeMutablePointer<segment_command_64> = lc.assumingMemoryBound(to: segment_command_64.self)
                         let nameOff: Int = MemoryLayout.size(ofValue: seg.pointee.cmd) + MemoryLayout.size(ofValue: seg.pointee.cmdsize)
                         let name: String = .init(cString: UnsafeRawPointer(lc).advanced(by: nameOff).assumingMemoryBound(to: Int8.self))
@@ -71,19 +72,15 @@ struct Rebind {
                             dataSegs.append(lc)
                         }
                     }
-                case LC_SYMTAB:
+                case UInt32(LC_SYMTAB):
                     symCmd = .init(OpaquePointer(segCmd))
-                case LC_DYSYMTAB:
+                case UInt32(LC_DYSYMTAB):
                     dynCmd = .init(OpaquePointer(segCmd))
                 default:
                     break
             }
 
             lc += Int(segCmd.pointee.cmdsize)
-        }
-
-        defer {
-            free(lc)
         }
 
         guard let ledCmd,
@@ -166,7 +163,7 @@ struct Rebind {
                 .n_un
                 .n_strx
 
-            if String(cString: table.str.advanced(by: Int(strTabOff))) == symbol {
+            if String(cString: table.str.advanced(by: Int(strTabOff) + 1)) == symbol {
                 lock.locked {
                     orig = bindings.advanced(by: i).pointee
                     bindings.advanced(by: i).initialize(to: .init(mutating: replace))

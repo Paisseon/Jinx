@@ -24,7 +24,7 @@ public extension HookFunc {
     }
     
     static var orig: T {
-        _orig!.assumingMemoryBound(to: T.self).pointee
+        unsafeBitCast(_orig, to: T.self)
     }
     
     @discardableResult

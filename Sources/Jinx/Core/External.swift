@@ -18,7 +18,7 @@ struct External {
     func hookFunc(
         orig: inout UnsafeMutableRawPointer?
     ) -> Bool {
-        switch Self.hookLibID {
+        switch Self.hookLib.1 {
             case .apple:
                 return Rebind(image: image ?? Self.currentImage, symbol: symbol, replace: replace).rebind(storingOrig: &orig)
             case .ellekit, .libhooker:
@@ -33,24 +33,19 @@ struct External {
     private typealias CharPtrPtr = UnsafeMutablePointer<UnsafePointer<Int8>>
     private typealias VoidPtrPtr = UnsafeMutablePointer<UnsafeMutableRawPointer?>
     private static let currentImage: String = "/private" + CommandLine.arguments[0]
-    private static var hookLibID: HookLib = .apple
     
-    private static let hookLib: String = {
+    private static let hookLib: (String, HookLib) = {
         let parts: [String] = String(cString: _dyld_get_image_name(0)).split(separator: "/").map { String($0) }
         
         switch parts.last {
             case "libinjector.dylib":
-                hookLibID = .ellekit
-                return parts.dropLast(2).joined(separator: "/") + "/libellekit.dylib"
+                return (parts.dropLast(2).joined(separator: "/") + "/libellekit.dylib", .ellekit)
             case "substitute-loader.dylib":
-                hookLibID = .substitute
-                return parts.dropLast().joined(separator: "/") + "/libsubstrate.dylib"
+                return (parts.dropLast().joined(separator: "/") + "/libsubstrate.dylib", .substitute)
             case "TweakInject.dylib":
-                hookLibID = .libhooker
-                return parts.dropLast().joined(separator: "/") + "/libhooker.dylib"
+                return (parts.dropLast().joined(separator: "/") + "/libhooker.dylib", .libhooker)
             default:
-                hookLibID = .apple
-                return ""
+                return ("", .apple)
         }
     }()
 
@@ -58,14 +53,14 @@ struct External {
 
     private typealias MSFindSymbolType = @convention(c) (OpaquePointer?, UnsafePointer<Int8>) -> UnsafeMutableRawPointer?
     private typealias MSGetImageByNameType = @convention(c) (UnsafePointer<Int8>) -> OpaquePointer?
-    private typealias MSHookFunctionType = @convention(c) (UnsafeRawPointer, UnsafeRawPointer, VoidPtrPtr) -> Void
+    private typealias MSHookFunctionType = @convention(c) (UnsafeMutableRawPointer, UnsafeRawPointer, VoidPtrPtr) -> Void
 
     private func ss_hookFunc(
         orig: inout UnsafeMutableRawPointer?
     ) -> Bool {
-        guard let MSFindSymbol: MSFindSymbolType = Storage.getSymbol(named: "MSFindSymbol", in: Self.hookLib),
-              let MSGetImageByName: MSGetImageByNameType = Storage.getSymbol(named: "MSGetImageByName", in: Self.hookLib),
-              let MSHookFunction: MSHookFunctionType = Storage.getSymbol(named: "MSHookFunction", in: Self.hookLib),
+        guard let MSFindSymbol: MSFindSymbolType = Storage.getSymbol(named: "MSFindSymbol", in: Self.hookLib.0),
+              let MSGetImageByName: MSGetImageByNameType = Storage.getSymbol(named: "MSGetImageByName", in: Self.hookLib.0),
+              let MSHookFunction: MSHookFunctionType = Storage.getSymbol(named: "MSHookFunction", in: Self.hookLib.0),
               let sym: UnsafeMutableRawPointer = MSFindSymbol(MSGetImageByName(image ?? Self.currentImage), "_" + symbol)
         else {
             return false
@@ -86,10 +81,10 @@ struct External {
     private func lh_hookFunc(
         orig: inout UnsafeMutableRawPointer?
     ) -> Bool {
-        guard let LHCloseImage: LHCloseImageType = Storage.getSymbol(named: "LHCloseImage", in: Self.hookLib),
-              let LHFindSymbols: LHFindSymbolsType = Storage.getSymbol(named: "LHFindSymbols", in: Self.hookLib),
-              let LHHookFunctions: LHHookFunctionsType = Storage.getSymbol(named: "LHHookFunctions", in: Self.hookLib),
-              let LHOpenImage: LHOpenImageType = Storage.getSymbol(named: "LHOpenImage", in: Self.hookLib),
+        guard let LHCloseImage: LHCloseImageType = Storage.getSymbol(named: "LHCloseImage", in: Self.hookLib.0),
+              let LHFindSymbols: LHFindSymbolsType = Storage.getSymbol(named: "LHFindSymbols", in: Self.hookLib.0),
+              let LHHookFunctions: LHHookFunctionsType = Storage.getSymbol(named: "LHHookFunctions", in: Self.hookLib.0),
+              let LHOpenImage: LHOpenImageType = Storage.getSymbol(named: "LHOpenImage", in: Self.hookLib.0),
               let lhImage: OpaquePointer = LHOpenImage(image ?? Self.currentImage)
         else {
             return false
