@@ -27,7 +27,7 @@ struct Replace {
         }
 
         lock.locked {
-            orig = class_replaceMethod(object_getClass(cls), sel, replace, types)
+            orig = class_replaceMethod(cls, sel, replace, types)
         }
 
         return true
