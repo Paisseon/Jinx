@@ -25,9 +25,38 @@ public extension Hook {
         set { Storage.setOrigOpaque(newValue, for: Self.uuid) }
     }
     
-    static var orig: T {
-        let tPtr: UnsafePointer<T> = withUnsafePointer(to: _orig, { UnsafeRawPointer($0).bindMemory(to: T.self, capacity: 1) })
+    private static func opaquePointer<U>(
+        from closure: U
+    ) -> OpaquePointer {
+        withUnsafePointer(to: closure) { UnsafeMutableRawPointer(mutating: $0).assumingMemoryBound(to: OpaquePointer.self).pointee }
+    }
+    
+    private static func safeBitCast<U>(
+        _ ptr: OpaquePointer?,
+        to type: U.Type
+    ) -> U {
+        let tPtr: UnsafePointer<U> = withUnsafePointer(to: ptr, { UnsafeRawPointer($0).bindMemory(to: U.self, capacity: 1) })
         return tPtr.pointee
+    }
+    
+    private static func extraSafeBitCast<U>(
+        _ ptr: OpaquePointer?,
+        to type: U.Type
+    ) -> U? {
+        guard ptr != nil else {
+            return nil
+        }
+        
+        let tPtr: UnsafePointer<U> = withUnsafePointer(to: ptr, { UnsafeRawPointer($0).bindMemory(to: U.self, capacity: 1) })
+        return tPtr.pointee
+    }
+    
+    static var orig: T {
+        safeBitCast(_orig, to: T.self)
+    }
+    
+    static var safeOrig: T? {
+        extraSafeBitCast(_orig, to: T.self)
     }
     
     @discardableResult

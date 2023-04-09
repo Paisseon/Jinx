@@ -27,6 +27,10 @@ public extension HookFunc {
         unsafeBitCast(_orig, to: T.self)
     }
     
+    static var safeOrig: T? {
+        _orig != nil ? unsafeBitCast(_orig, to: T.self) : nil
+    }
+    
     @discardableResult
     func hook() -> Bool {
         External(symbol: name, image: image, replace: unsafeBitCast(replace, to: UnsafeMutableRawPointer.self)).hookFunc(orig: &Self._orig)

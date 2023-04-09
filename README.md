@@ -81,6 +81,8 @@ For `Hook` and `HookFunc`, simply call `orig()` from within the replacement defi
 
 `HookGroup` uses `orig0` through `orig9`. These are identical to the other protocols’ `orig` except for the name, which allows unambiguity as to which sub-hook it relates.
 
+If it is okay to run your replacement code without the original, but you would still rather run the original code if possible, you can use `safeOrig` instead, which returns an optional.
+
 ### Getting and setting instance variables
 Inside a `Hook` or `HookGroup` replacement definition, 
 
