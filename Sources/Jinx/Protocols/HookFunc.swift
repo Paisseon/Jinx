@@ -29,7 +29,7 @@ public extension HookFunc {
     
     @discardableResult
     func hook() -> Bool {
-        External(symbol: name, image: image, replace: unsafeBitCast(replace, to: UnsafeRawPointer.self)).hookFunc(orig: &Self._orig)
+        External(symbol: name, image: image, replace: unsafeBitCast(replace, to: UnsafeMutableRawPointer.self)).hookFunc(orig: &Self._orig)
     }
     
     @discardableResult

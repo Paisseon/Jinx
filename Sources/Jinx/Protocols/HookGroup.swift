@@ -84,17 +84,31 @@ public extension HookGroup {
         get { Storage.getOrigOpaque(for: Self.uuid + 9) }
         set { Storage.setOrigOpaque(newValue, for: Self.uuid + 9) }
     }
+    
+    private static func opaquePointer<U>(
+        from closure: U
+    ) -> OpaquePointer {
+        withUnsafePointer(to: closure) { UnsafeMutableRawPointer(mutating: $0).assumingMemoryBound(to: OpaquePointer.self).pointee }
+    }
+    
+    private static func safeBitCast<U>(
+        _ ptr: OpaquePointer?,
+        to type: U.Type
+    ) -> U {
+        let tPtr: UnsafePointer<U> = withUnsafePointer(to: ptr, { UnsafeRawPointer($0).bindMemory(to: U.self, capacity: 1) })
+        return tPtr.pointee
+    }
 
-    static var orig0: T0 { unsafeBitCast(_orig0, to: T0.self) }
-    static var orig1: T1 { unsafeBitCast(_orig1, to: T1.self) }
-    static var orig2: T2 { unsafeBitCast(_orig2, to: T2.self) }
-    static var orig3: T3 { unsafeBitCast(_orig3, to: T3.self) }
-    static var orig4: T4 { unsafeBitCast(_orig4, to: T4.self) }
-    static var orig5: T5 { unsafeBitCast(_orig5, to: T5.self) }
-    static var orig6: T6 { unsafeBitCast(_orig6, to: T6.self) }
-    static var orig7: T7 { unsafeBitCast(_orig7, to: T7.self) }
-    static var orig8: T8 { unsafeBitCast(_orig8, to: T8.self) }
-    static var orig9: T9 { unsafeBitCast(_orig9, to: T9.self) }
+    static var orig0: T0 { safeBitCast(_orig0, to: T0.self) }
+    static var orig1: T1 { safeBitCast(_orig1, to: T1.self) }
+    static var orig2: T2 { safeBitCast(_orig2, to: T2.self) }
+    static var orig3: T3 { safeBitCast(_orig3, to: T3.self) }
+    static var orig4: T4 { safeBitCast(_orig4, to: T4.self) }
+    static var orig5: T5 { safeBitCast(_orig5, to: T5.self) }
+    static var orig6: T6 { safeBitCast(_orig6, to: T6.self) }
+    static var orig7: T7 { safeBitCast(_orig7, to: T7.self) }
+    static var orig8: T8 { safeBitCast(_orig8, to: T8.self) }
+    static var orig9: T9 { safeBitCast(_orig9, to: T9.self) }
 
     // Hooking
 
@@ -171,42 +185,42 @@ public extension HookGroup {
             }
         }
 
-        results[0] = Replace.message(cls, sel0, with: unsafeBitCast(replace0, to: OpaquePointer.self), orig: &Self._orig0)
+        results[0] = Replace.message(cls, sel0, with: Self.opaquePointer(from: replace0), orig: &Self._orig0)
 
         if let replace1, let sel1 {
-            results[1] = Replace.message(cls, sel1, with: unsafeBitCast(replace1, to: OpaquePointer.self), orig: &Self._orig1)
+            results[1] = Replace.message(cls, sel1, with: Self.opaquePointer(from: replace1), orig: &Self._orig1)
         }
 
         if let replace2, let sel2 {
-            results[2] = Replace.message(cls, sel2, with: unsafeBitCast(replace2, to: OpaquePointer.self), orig: &Self._orig2)
+            results[2] = Replace.message(cls, sel2, with: Self.opaquePointer(from: replace2), orig: &Self._orig2)
         }
         
         if let replace3, let sel3 {
-            results[3] = Replace.message(cls, sel3, with: unsafeBitCast(replace3, to: OpaquePointer.self), orig: &Self._orig3)
+            results[3] = Replace.message(cls, sel3, with: Self.opaquePointer(from: replace3), orig: &Self._orig3)
         }
         
         if let replace4, let sel4 {
-            results[4] = Replace.message(cls, sel4, with: unsafeBitCast(replace4, to: OpaquePointer.self), orig: &Self._orig4)
+            results[4] = Replace.message(cls, sel4, with: Self.opaquePointer(from: replace4), orig: &Self._orig4)
         }
         
         if let replace5, let sel5 {
-            results[5] = Replace.message(cls, sel5, with: unsafeBitCast(replace5, to: OpaquePointer.self), orig: &Self._orig5)
+            results[5] = Replace.message(cls, sel5, with: Self.opaquePointer(from: replace5), orig: &Self._orig5)
         }
         
         if let replace6, let sel6 {
-            results[6] = Replace.message(cls, sel6, with: unsafeBitCast(replace6, to: OpaquePointer.self), orig: &Self._orig6)
+            results[6] = Replace.message(cls, sel6, with: Self.opaquePointer(from: replace6), orig: &Self._orig6)
         }
         
         if let replace7, let sel7 {
-            results[7] = Replace.message(cls, sel7, with: unsafeBitCast(replace7, to: OpaquePointer.self), orig: &Self._orig7)
+            results[7] = Replace.message(cls, sel7, with: Self.opaquePointer(from: replace7), orig: &Self._orig7)
         }
         
         if let replace8, let sel8 {
-            results[8] = Replace.message(cls, sel8, with: unsafeBitCast(replace8, to: OpaquePointer.self), orig: &Self._orig8)
+            results[8] = Replace.message(cls, sel8, with: Self.opaquePointer(from: replace8), orig: &Self._orig8)
         }
         
         if let replace9, let sel9 {
-            results[9] = Replace.message(cls, sel9, with: unsafeBitCast(replace9, to: OpaquePointer.self), orig: &Self._orig9)
+            results[9] = Replace.message(cls, sel9, with: Self.opaquePointer(from: replace9), orig: &Self._orig9)
         }
 
         return results

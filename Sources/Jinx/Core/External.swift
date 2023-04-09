@@ -13,7 +13,7 @@ struct External {
 
     let symbol: String
     let image: String?
-    let replace: UnsafeRawPointer
+    let replace: UnsafeMutableRawPointer
 
     func hookFunc(
         orig: inout UnsafeMutableRawPointer?
@@ -48,6 +48,50 @@ struct External {
                 return ("", .apple)
         }
     }()
+    
+    // MARK: Libhooker API
+    
+    private typealias LHHookFunctionsType = @convention(c) (UnsafeRawPointer, Int32) -> Int16
+    private typealias LHOpenImageType = @convention(c) (UnsafePointer<Int8>) -> OpaquePointer?
+    private typealias LHCloseImageType = @convention(c) (OpaquePointer?) -> Void
+    private typealias LHFindSymbolsType = @convention(c) (OpaquePointer, CharPtrPtr, VoidPtrPtr, Int ) -> Bool
+    
+    private func lh_hookFunc(
+        orig: inout UnsafeMutableRawPointer?
+    ) -> Bool {
+        guard let LHCloseImage: LHCloseImageType = Storage.getSymbol(named: "LHCloseImage", in: Self.hookLib.0),
+              let LHFindSymbols: LHFindSymbolsType = Storage.getSymbol(named: "LHFindSymbols", in: Self.hookLib.0),
+              let LHHookFunctions: LHHookFunctionsType = Storage.getSymbol(named: "LHHookFunctions", in: Self.hookLib.0),
+              let LHOpenImage: LHOpenImageType = Storage.getSymbol(named: "LHOpenImage", in: Self.hookLib.0),
+              let lhImage: OpaquePointer = LHOpenImage(image ?? Self.currentImage)
+        else {
+            return false
+        }
+        
+        var searchSyms: [UnsafeMutableRawPointer?] = .init(repeating: nil, count: 1)
+        var symbolNames: UnsafePointer<Int8> = .init(strdup("_" + symbol))
+        
+        guard LHFindSymbols(lhImage, &symbolNames, &searchSyms, 1) else {
+            LHCloseImage(lhImage)
+            return false
+        }
+        
+        var result: Int16 = 1
+        
+        withUnsafeMutablePointer(to: &orig) { pointer in
+            var hook: LHFunctionHook = .init(
+                function: searchSyms[0],
+                replacement: replace,
+                oldptr: pointer,
+                options: nil
+            )
+            
+            result = LHHookFunctions(&hook, 1)
+        }
+        
+        LHCloseImage(lhImage)
+        return result == 0
+    }
 
     // MARK: Substrate API
 
@@ -69,49 +113,5 @@ struct External {
         MSHookFunction(sym, replace, &orig)
 
         return true
-    }
-    
-    // MARK: Libhooker API
-    
-    private typealias LHHookFunctionsType = @convention(c) (UnsafeRawPointer, Int32) -> Int16
-    private typealias LHOpenImageType = @convention(c) (UnsafePointer<Int8>) -> OpaquePointer?
-    private typealias LHCloseImageType = @convention(c) (OpaquePointer?) -> Void
-    private typealias LHFindSymbolsType = @convention(c) (OpaquePointer, CharPtrPtr, VoidPtrPtr, Int ) -> Bool
-
-    private func lh_hookFunc(
-        orig: inout UnsafeMutableRawPointer?
-    ) -> Bool {
-        guard let LHCloseImage: LHCloseImageType = Storage.getSymbol(named: "LHCloseImage", in: Self.hookLib.0),
-              let LHFindSymbols: LHFindSymbolsType = Storage.getSymbol(named: "LHFindSymbols", in: Self.hookLib.0),
-              let LHHookFunctions: LHHookFunctionsType = Storage.getSymbol(named: "LHHookFunctions", in: Self.hookLib.0),
-              let LHOpenImage: LHOpenImageType = Storage.getSymbol(named: "LHOpenImage", in: Self.hookLib.0),
-              let lhImage: OpaquePointer = LHOpenImage(image ?? Self.currentImage)
-        else {
-            return false
-        }
-
-        var searchSyms: [UnsafeMutableRawPointer?] = .init(repeating: nil, count: 1)
-        var symbolNames: UnsafePointer<Int8> = .init(strdup("_" + symbol))
-
-        guard LHFindSymbols(lhImage, &symbolNames, &searchSyms, 1) else {
-            LHCloseImage(lhImage)
-            return false
-        }
-
-        var result: Int16 = 1
-
-        withUnsafeMutablePointer(to: &orig) { pointer in
-            var hook: LHFunctionHook = .init(
-                function: searchSyms[0],
-                replacement: replace,
-                oldptr: pointer,
-                options: nil
-            )
-
-            result = LHHookFunctions(&hook, 1)
-        }
-
-        LHCloseImage(lhImage)
-        return result == 0
     }
 }

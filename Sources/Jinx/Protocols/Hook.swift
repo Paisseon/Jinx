@@ -26,7 +26,8 @@ public extension Hook {
     }
     
     static var orig: T {
-        unsafeBitCast(_orig, to: T.self)
+        let tPtr: UnsafePointer<T> = withUnsafePointer(to: _orig, { UnsafeRawPointer($0).bindMemory(to: T.self, capacity: 1) })
+        return tPtr.pointee
     }
     
     @discardableResult
@@ -35,7 +36,11 @@ public extension Hook {
             return false
         }
         
-        return Replace.message(cls, sel, with: unsafeBitCast(replace, to: OpaquePointer.self), orig: &Self._orig)
+        return Replace.message(
+            cls, sel,
+            with: withUnsafePointer(to: replace) { UnsafeMutableRawPointer(mutating: $0).assumingMemoryBound(to: OpaquePointer.self).pointee },
+            orig: &Self._orig
+        )
     }
     
     @discardableResult
