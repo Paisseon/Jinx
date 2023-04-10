@@ -9,6 +9,20 @@ import Darwin.C
 
 struct Storage {
     // MARK: Internal
+    
+    @inlinable
+    static func getOrigOpaque(
+        for id: Int
+    ) -> OpaquePointer? {
+        origsOpaque[id] ?? nil
+    }
+    
+    @inlinable
+    static func getOrigRaw(
+        for id: Int
+    ) -> UnsafeMutableRawPointer? {
+        origsRaw[id] ?? nil
+    }
 
     static func getSymbol<T>(
         named symbol: String,
@@ -34,7 +48,22 @@ struct Storage {
 
         return unsafeBitCast(symPtr, to: T?.self)
     }
-
+    
+    @inlinable
+    static func getUUID(
+        for obj: ObjectIdentifier
+    ) -> Int {
+        if let ret: Int = uuids[obj] {
+            return ret
+        }
+        
+        let newID: Int = uuids.count * 10
+        uuids[obj] = newID
+        
+        return newID
+    }
+    
+    @inlinable
     static func removeImage(
         named image: String
     ) {
@@ -43,12 +72,7 @@ struct Storage {
         }
     }
 
-    static func getOrigOpaque(
-        for id: Int
-    ) -> OpaquePointer? {
-        origsOpaque[id] ?? nil
-    }
-
+    @inlinable
     static func setOrigOpaque(
         _ ptr: OpaquePointer?,
         for id: Int
@@ -58,12 +82,7 @@ struct Storage {
         }
     }
 
-    static func getOrigRaw(
-        for id: Int
-    ) -> UnsafeMutableRawPointer? {
-        origsRaw[id] ?? nil
-    }
-
+    @inlinable
     static func setOrigRaw(
         _ ptr: UnsafeMutableRawPointer?,
         for id: Int
@@ -79,5 +98,6 @@ struct Storage {
     private static var libImages: [String: UnsafeMutableRawPointer] = [:]
     private static var origsOpaque: [Int: OpaquePointer?] = [:]
     private static var origsRaw: [Int: UnsafeMutableRawPointer?] = [:]
+    private static var uuids: [ObjectIdentifier: Int] = [:]
     private static let lock: Lock = .init()
 }

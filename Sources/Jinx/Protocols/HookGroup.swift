@@ -5,9 +5,7 @@
 //  Created by Lilliana on 25/03/2023.
 //
 
-import ObjectiveC.runtime
-
-public typealias HookClass = HookGroup
+import ObjectiveC
 
 // Quoth Kabir Oberai: "y u no variadic generics, swift :/"
 
@@ -30,7 +28,7 @@ public protocol HookGroup {
 
 public extension HookGroup {
     private static var uuid: Int {
-        ObjectIdentifier(Self.self).hashValue
+        Storage.getUUID(for: ObjectIdentifier(Self.self))
     }
 
     // Extra origs
@@ -98,18 +96,6 @@ public extension HookGroup {
         let tPtr: UnsafePointer<U> = withUnsafePointer(to: ptr, { UnsafeRawPointer($0).bindMemory(to: U.self, capacity: 1) })
         return tPtr.pointee
     }
-    
-    private static func extraSafeBitCast<U>(
-        _ ptr: OpaquePointer?,
-        to type: U.Type
-    ) -> U? {
-        guard ptr != nil else {
-            return nil
-        }
-        
-        let tPtr: UnsafePointer<U> = withUnsafePointer(to: ptr, { UnsafeRawPointer($0).bindMemory(to: U.self, capacity: 1) })
-        return tPtr.pointee
-    }
 
     static var orig0: T0 { safeBitCast(_orig0, to: T0.self) }
     static var orig1: T1 { safeBitCast(_orig1, to: T1.self) }
@@ -121,17 +107,6 @@ public extension HookGroup {
     static var orig7: T7 { safeBitCast(_orig7, to: T7.self) }
     static var orig8: T8 { safeBitCast(_orig8, to: T8.self) }
     static var orig9: T9 { safeBitCast(_orig9, to: T9.self) }
-    
-    static var safeOrig0: T0? { extraSafeBitCast(_orig0, to: T0.self) }
-    static var safeOrig1: T1? { extraSafeBitCast(_orig1, to: T1.self) }
-    static var safeOrig2: T2? { extraSafeBitCast(_orig2, to: T2.self) }
-    static var safeOrig3: T3? { extraSafeBitCast(_orig3, to: T3.self) }
-    static var safeOrig4: T4? { extraSafeBitCast(_orig4, to: T4.self) }
-    static var safeOrig5: T5? { extraSafeBitCast(_orig5, to: T5.self) }
-    static var safeOrig6: T6? { extraSafeBitCast(_orig6, to: T6.self) }
-    static var safeOrig7: T7? { extraSafeBitCast(_orig7, to: T7.self) }
-    static var safeOrig8: T8? { extraSafeBitCast(_orig8, to: T8.self) }
-    static var safeOrig9: T9? { extraSafeBitCast(_orig9, to: T9.self) }
 
     // Hooking
 

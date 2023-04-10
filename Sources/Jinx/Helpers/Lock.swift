@@ -17,6 +17,7 @@ struct Lock {
         lock = _lock
     }
     
+    @inlinable
     func locked<T>(
         _ fn: () throws -> T
     ) rethrows -> T {

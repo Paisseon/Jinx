@@ -5,7 +5,7 @@
 //  Created by Lilliana on 25/03/2023.
 //
 
-import ObjectiveC.runtime
+import ObjectiveC
 
 public protocol Hook {
     associatedtype T
@@ -17,7 +17,7 @@ public protocol Hook {
 
 public extension Hook {
     private static var uuid: Int {
-        ObjectIdentifier(Self.self).hashValue
+        Storage.getUUID(for: ObjectIdentifier(Self.self))
     }
     
     private static var _orig: OpaquePointer? {
@@ -39,24 +39,8 @@ public extension Hook {
         return tPtr.pointee
     }
     
-    private static func extraSafeBitCast<U>(
-        _ ptr: OpaquePointer?,
-        to type: U.Type
-    ) -> U? {
-        guard ptr != nil else {
-            return nil
-        }
-        
-        let tPtr: UnsafePointer<U> = withUnsafePointer(to: ptr, { UnsafeRawPointer($0).bindMemory(to: U.self, capacity: 1) })
-        return tPtr.pointee
-    }
-    
     static var orig: T {
         safeBitCast(_orig, to: T.self)
-    }
-    
-    static var safeOrig: T? {
-        extraSafeBitCast(_orig, to: T.self)
     }
     
     @discardableResult
@@ -65,11 +49,7 @@ public extension Hook {
             return false
         }
         
-        return Replace.message(
-            cls, sel,
-            with: withUnsafePointer(to: replace) { UnsafeMutableRawPointer(mutating: $0).assumingMemoryBound(to: OpaquePointer.self).pointee },
-            orig: &Self._orig
-        )
+        return Replace.message(cls, sel, with: Self.opaquePointer(from: replace), orig: &Self._orig)
     }
     
     @discardableResult
@@ -78,6 +58,6 @@ public extension Hook {
             return false
         }
         
-        return Replace.message(cls, sel, with: Self._orig!, orig: &Self._orig)
+        return Replace.message(cls, sel, with: Self.opaquePointer(from: Self.orig), orig: &Self._orig)
     }
 }

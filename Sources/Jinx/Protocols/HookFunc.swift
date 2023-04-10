@@ -15,7 +15,7 @@ public protocol HookFunc {
 
 public extension HookFunc {
     private static var uuid: Int {
-        ObjectIdentifier(Self.self).hashValue
+        Storage.getUUID(for: ObjectIdentifier(Self.self))
     }
     
     private static var _orig: UnsafeMutableRawPointer? {
@@ -24,11 +24,7 @@ public extension HookFunc {
     }
     
     static var orig: T {
-        unsafeBitCast(_orig, to: T.self)
-    }
-    
-    static var safeOrig: T? {
-        _orig != nil ? unsafeBitCast(_orig, to: T.self) : nil
+        return unsafeBitCast(_orig, to: T.self)
     }
     
     @discardableResult

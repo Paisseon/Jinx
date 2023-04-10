@@ -5,9 +5,10 @@
 //  Created by Lilliana on 21/03/2023.
 //
 
-import ObjectiveC.runtime
+import ObjectiveC
 
 public struct Ivar {
+    @inlinable
     public static func get<T>(
         _ name: String,
         for obj: AnyObject
@@ -23,6 +24,7 @@ public struct Ivar {
         return nil
     }
     
+    @inlinable
     public static func set<T>(
         _ name: String,
         for obj: AnyObject,
