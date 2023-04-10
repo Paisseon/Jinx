@@ -37,11 +37,9 @@ struct Replace {
         var superclass: AnyClass? = class_getSuperclass(cls)
         
         while let thisSuper: AnyClass = superclass {
-            if let method: Method = class_getInstanceMethod(thisSuper, sel),
-               let impl: OpaquePointer = method_getImplementation(method)
-            {
+            if let method: Method = class_getInstanceMethod(thisSuper, sel) {
                 lock.locked {
-                    orig = impl
+                    orig = method_getImplementation(method)
                 }
                 
                 return true
