@@ -18,7 +18,7 @@ public struct JinxPreferences {
         let cfDomain: CFString = getCFString(from: domain)
 
         if isSandboxed() {
-            dict = readPlist(for: "/var/mobile/Library/Preferences/\(domain).plist".withRootPath) ?? [:]
+            dict = readPlist(for: "/var/mobile/Library/Preferences/\(domain).plist") ?? [:]
         } else {
             let keyList: CFArray = CFPreferencesCopyKeyList(
                 cfDomain,
@@ -56,7 +56,9 @@ public struct JinxPreferences {
 private func readPlist(
     for path: String
 ) -> [String: Any]? {
-    guard let url: CFURL = CFURLCreateWithFileSystemPath(nil, getCFString(from: path), .cfurlposixPathStyle, false) else {
+    let _path: String = access(path, F_OK) == 0 ? path : path.withRootPath
+    
+    guard let url: CFURL = CFURLCreateWithFileSystemPath(nil, getCFString(from: _path), .cfurlposixPathStyle, false) else {
         return nil
     }
 
