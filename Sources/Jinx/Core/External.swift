@@ -20,7 +20,7 @@ struct External {
     ) -> Bool {
         switch Self.hookLib.1 {
             case .apple:
-                return Rebind(image: image ?? Self.currentImage, symbol: symbol, replace: replace).rebind(storingOrig: &orig)
+                return Rebind(image: image ?? "/private" + CommandLine.arguments[0], symbol: symbol, replace: replace).rebind(storingOrig: &orig)
             case .ellekit, .libhooker:
                 return lh_hookFunc(orig: &orig)
             case .substitute:
@@ -32,7 +32,6 @@ struct External {
 
     private typealias CharPtrPtr = UnsafeMutablePointer<UnsafePointer<Int8>>
     private typealias VoidPtrPtr = UnsafeMutablePointer<UnsafeMutableRawPointer?>
-    private static let currentImage: String = "/private" + CommandLine.arguments[0]
     
     private static let hookLib: (String, HookLib) = {
         let parts: [String] = String(cString: _dyld_get_image_name(0)).split(separator: "/").map { String($0) }
@@ -52,7 +51,7 @@ struct External {
     // MARK: Libhooker API
     
     private typealias LHHookFunctionsType = @convention(c) (UnsafeRawPointer, Int32) -> Int16
-    private typealias LHOpenImageType = @convention(c) (UnsafePointer<Int8>) -> OpaquePointer?
+    private typealias LHOpenImageType = @convention(c) (UnsafePointer<Int8>?) -> OpaquePointer?
     private typealias LHCloseImageType = @convention(c) (OpaquePointer?) -> Void
     private typealias LHFindSymbolsType = @convention(c) (OpaquePointer, CharPtrPtr, VoidPtrPtr, Int ) -> Bool
     
@@ -63,7 +62,7 @@ struct External {
               let LHFindSymbols: LHFindSymbolsType = Storage.getSymbol(named: "LHFindSymbols", in: Self.hookLib.0),
               let LHHookFunctions: LHHookFunctionsType = Storage.getSymbol(named: "LHHookFunctions", in: Self.hookLib.0),
               let LHOpenImage: LHOpenImageType = Storage.getSymbol(named: "LHOpenImage", in: Self.hookLib.0),
-              let lhImage: OpaquePointer = LHOpenImage(image ?? Self.currentImage)
+              let lhImage: OpaquePointer = LHOpenImage(image)
         else {
             return false
         }
@@ -96,7 +95,7 @@ struct External {
     // MARK: Substrate API
 
     private typealias MSFindSymbolType = @convention(c) (OpaquePointer?, UnsafePointer<Int8>) -> UnsafeMutableRawPointer?
-    private typealias MSGetImageByNameType = @convention(c) (UnsafePointer<Int8>) -> OpaquePointer?
+    private typealias MSGetImageByNameType = @convention(c) (UnsafePointer<Int8>?) -> OpaquePointer?
     private typealias MSHookFunctionType = @convention(c) (UnsafeMutableRawPointer, UnsafeRawPointer, VoidPtrPtr) -> Void
 
     private func ss_hookFunc(
@@ -105,7 +104,7 @@ struct External {
         guard let MSFindSymbol: MSFindSymbolType = Storage.getSymbol(named: "MSFindSymbol", in: Self.hookLib.0),
               let MSGetImageByName: MSGetImageByNameType = Storage.getSymbol(named: "MSGetImageByName", in: Self.hookLib.0),
               let MSHookFunction: MSHookFunctionType = Storage.getSymbol(named: "MSHookFunction", in: Self.hookLib.0),
-              let sym: UnsafeMutableRawPointer = MSFindSymbol(MSGetImageByName(image ?? Self.currentImage), "_" + symbol)
+              let sym: UnsafeMutableRawPointer = MSFindSymbol(image == nil ? nil : MSGetImageByName(image), "_" + symbol)
         else {
             return false
         }

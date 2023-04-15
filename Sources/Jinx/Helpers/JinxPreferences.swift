@@ -15,12 +15,10 @@ public struct JinxPreferences {
     public init(
         for domain: String
     ) {
-        let cDomain: UnsafePointer<Int8> = domain.withCString { $0 }
-        let cfDomain: CFString = CFStringCreateWithCString(nil, cDomain, CFStringBuiltInEncodings.UTF8.rawValue)
+        let cfDomain: CFString = getCFString(from: domain)
 
         if isSandboxed() {
-            let prefix: String = access("/var/jb", F_OK) == 0 ? "/var/jb" : ""
-            dict = readPlist(for: "\(prefix)/var/mobile/Library/Preferences/\(domain).plist") ?? [:]
+            dict = readPlist(for: "/var/mobile/Library/Preferences/\(domain).plist".withRootPath) ?? [:]
         } else {
             let keyList: CFArray = CFPreferencesCopyKeyList(
                 cfDomain,
@@ -63,13 +61,12 @@ private func readPlist(
     }
 
     let stream: CFReadStream = CFReadStreamCreateWithFile(nil, url)
+    var buffer: [UInt8] = .init(repeating: 0, count: 0x1000)
+    let data: CFMutableData = CFDataCreateMutable(nil, 0)
 
     guard CFReadStreamOpen(stream) else {
         return nil
     }
-
-    var buffer: [UInt8] = .init(repeating: 0, count: 0x1000)
-    let data: CFMutableData = CFDataCreateMutable(nil, 0)
 
     while CFReadStreamHasBytesAvailable(stream) {
         let byteCount = CFReadStreamRead(stream, &buffer, buffer.count)
@@ -100,7 +97,7 @@ private func isSandboxed() -> Bool {
     #endif
 }
 
-// MARK: CoreFoundation <-> Swift conversions
+// MARK: CoreFoundation <3- Swift conversions
 
 private func getCFString(
     from str: String

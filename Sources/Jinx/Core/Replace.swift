@@ -30,25 +30,21 @@ struct Replace {
             orig = class_replaceMethod(cls, sel, replace, types)
         }
         
-        if orig != nil {
-            return true
-        }
-        
         var superclass: AnyClass? = class_getSuperclass(cls)
         
-        while let thisSuper: AnyClass = superclass {
+        while orig == nil,
+              let thisSuper: AnyClass = superclass
+        {
             if let method: Method = class_getInstanceMethod(thisSuper, sel) {
                 lock.locked {
                     orig = method_getImplementation(method)
                 }
-                
-                return true
             }
             
             superclass = class_getSuperclass(thisSuper)
         }
 
-        return false
+        return orig != nil
     }
 
     // MARK: Private
@@ -61,7 +57,7 @@ struct Replace {
         with replace: OpaquePointer,
         orig: inout OpaquePointer?
     ) -> Bool {
-        let newSel: Selector = sel_registerName("Jinx_\(Int.random(in: 0 ..< 100))_" + String(cString: sel_getName(sel)))
+        let newSel: Selector = sel_registerName("Jinx_" + String(cString: sel_getName(sel)))
 
         guard let origMethod: Method = class_getClassMethod(cls, sel),
               let method: Method = class_getClassMethod(cls, sel),
