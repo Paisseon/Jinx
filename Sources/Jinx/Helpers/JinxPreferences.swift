@@ -6,6 +6,7 @@
 //
 
 import CoreFoundation
+import os
 
 // MARK: - JinxPreferences
 
@@ -58,9 +59,17 @@ private func readPlist(
 ) -> [String: Any]? {
     let _path: String = access(path, F_OK) == 0 ? path : path.withRootPath
     
+    if _path.hasPrefix("/var/jb") {
+        os_log("[Satella] Attempting to read plist in /var/jb")
+    } else {
+        os_log("[Satella] Attempting to read plist in /")
+    }
+    
     guard let url: CFURL = CFURLCreateWithFileSystemPath(nil, getCFString(from: _path), .cfurlposixPathStyle, false) else {
         return nil
     }
+    
+    os_log("[Satella] Got prefs URL")
 
     let stream: CFReadStream = CFReadStreamCreateWithFile(nil, url)
     var buffer: [UInt8] = .init(repeating: 0, count: 0x1000)
@@ -79,6 +88,12 @@ private func readPlist(
     }
 
     CFReadStreamClose(stream)
+    
+    if #available(iOS 15, *) {
+        os_log("[Satella] Read \(CFDataGetLength(data)) bytes from plist")
+    } else {
+        os_log("[Satella] Finished reading plist, returning")
+    }
 
     return CFPropertyListCreateWithData(nil, data, 0, nil, nil)?.takeRetainedValue() as? [String: Any]
 }
