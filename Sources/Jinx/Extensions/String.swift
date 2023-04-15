@@ -7,7 +7,7 @@
 
 public extension String {
     var withRootPath: String {
-        #if THEOS_PACKAGE_INSTALL_PREFIX
+        #if JINX_ROOTLESS
         "/var/jb" + self
         #else
         self
