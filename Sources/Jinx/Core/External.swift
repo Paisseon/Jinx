@@ -18,23 +18,20 @@ struct External {
     func hookFunc(
         orig: inout UnsafeMutableRawPointer?
     ) -> Bool {
-        var res: Bool = false
-        withUnsafeMutablePointer(to: &orig) { pointer in
-            res = Rebind(hooks: [RebindHook(name: symbol, replace: replace, orig: pointer)]).rebind()
+        switch Self.hookLib.1 {
+            case .apple:
+                var ret: Bool = false
+
+                withUnsafeMutablePointer(to: &orig) { pointer in
+                    ret = Rebind(hook: RebindHook(name: symbol, replace: replace, orig: pointer)).rebind()
+                }
+
+                return ret
+            case .ellekit, .libhooker:
+                return lh_hookFunc(orig: &orig)
+            case .substitute:
+                return ss_hookFunc(orig: &orig)
         }
-        return res
-//        switch Self.hookLib.1 {
-//            case .apple:
-//                var res: Bool = false
-//                withUnsafeMutablePointer(to: &orig) { pointer in
-//                    res = Rebind(hooks: [RebindHook(name: symbol, replace: replace, orig: pointer)]).rebind()
-//                }
-//                return res
-//            case .ellekit, .libhooker:
-//                return lh_hookFunc(orig: &orig)
-//            case .substitute:
-//                return ss_hookFunc(orig: &orig)
-//        }
     }
 
     // MARK: Private

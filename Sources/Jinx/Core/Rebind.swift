@@ -6,10 +6,9 @@
 //
 
 import MachO
-import os
 
 struct Rebind {
-    let hooks: [RebindHook]
+    let hook: RebindHook
     
     func rebind() -> Bool {
         for i: UInt32 in 0 ..< _dyld_image_count() {
@@ -20,14 +19,16 @@ struct Rebind {
             let machHeader: UnsafePointer<mach_header_64> = header.withMemoryRebound(to: mach_header_64.self, capacity: 1) { $0 }
             let slide: Int = _dyld_get_image_vmaddr_slide(i)
             
-            guard let table: Table = getTable(at: slide, in: machHeader),
-                  replace(at: slide, in: table) == true
-            else {
-                return false
+            guard let table: Table = getTable(at: slide, in: machHeader) else {
+                continue
+            }
+            
+            if replace(at: slide, in: table) {
+                return true
             }
         }
         
-        return true
+        return false
     }
     
     private func getTable(
@@ -111,7 +112,6 @@ struct Rebind {
         in table: Table
     ) -> Bool {
         let indices: UnsafeMutablePointer<UInt32> = table.ind.advanced(by: Int(table.sect.pointee.reserved1))
-        var success: Bool = false
         
         guard let bindings: UnsafeMutablePointer<UnsafeMutableRawPointer> = .init(bitPattern: slide + Int(table.sect.pointee.addr)) else {
             return false
@@ -140,19 +140,13 @@ struct Rebind {
             let strTabOff: UInt32 = table.sym.advanced(by: Int(inSym.pointee)).pointee.n_un.n_strx
             let symName: String = .init(cString: table.str.advanced(by: Int(strTabOff) + 1))
             
-            for hook in hooks {
-                if symName == hook.name {
-                    hook.orig.initialize(to: bindings.advanced(by: i))
-                    bindings.advanced(by: i).initialize(to: hook.replace)
-                    success = true
-                    
-                    if #available(iOS 15, *) {
-                        os_log("[JINX] Success on \(symName)")
-                    }
-                }
+            if symName == hook.name {
+                hook.orig.initialize(to: bindings.advanced(by: i).pointee)
+                bindings.advanced(by: i).initialize(to: hook.replace)
+                return true
             }
         }
         
-        return success
+        return false
     }
 }
