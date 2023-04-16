@@ -20,7 +20,11 @@ struct External {
     ) -> Bool {
         switch Self.hookLib.1 {
             case .apple:
-                return Rebind(image: image ?? "/private" + CommandLine.arguments[0], symbol: symbol, replace: replace).rebind(storingOrig: &orig)
+                var res: Bool = false
+                withUnsafeMutablePointer(to: &orig) { pointer in
+                    res = Rebind(hooks: [RebindHook(name: symbol, replace: replace, orig: pointer)]).rebind()
+                }
+                return res
             case .ellekit, .libhooker:
                 return lh_hookFunc(orig: &orig)
             case .substitute:

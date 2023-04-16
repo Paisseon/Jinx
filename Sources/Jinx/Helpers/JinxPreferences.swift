@@ -1,12 +1,11 @@
 //
-//  Ivar.swift
+//  JinxPreferences.swift
 //  Jinx
 //
-//  Created by Lilliana on 21/03/2023.
+//  Created by Lilliana on 13/04/2023.
 //
 
 import CoreFoundation
-import os
 
 // MARK: - JinxPreferences
 
@@ -57,23 +56,21 @@ public struct JinxPreferences {
 private func readPlist(
     for path: String
 ) -> [String: Any]? {
-    let _path: String = access(path, F_OK) == 0 ? path : path.withRootPath
+    let _path: String = access(path.withRootPath, F_OK) == 0 ? path.withRootPath : path
     
-    if _path.hasPrefix("/var/jb") {
-        os_log("[Satella] Attempting to read plist in /var/jb")
-    } else {
-        os_log("[Satella] Attempting to read plist in /")
-    }
-    
-    guard let url: CFURL = CFURLCreateWithFileSystemPath(nil, getCFString(from: _path), .cfurlposixPathStyle, false) else {
+    guard access(_path, R_OK) == 0,
+          let url: CFURL = CFURLCreateWithFileSystemPath(nil, getCFString(from: _path), .cfurlposixPathStyle, false)
+    else {
         return nil
     }
-    
-    os_log("[Satella] Got prefs URL")
 
     let stream: CFReadStream = CFReadStreamCreateWithFile(nil, url)
     var buffer: [UInt8] = .init(repeating: 0, count: 0x1000)
     let data: CFMutableData = CFDataCreateMutable(nil, 0)
+    
+    defer {
+        CFReadStreamClose(stream)
+    }
 
     guard CFReadStreamOpen(stream) else {
         return nil
@@ -87,14 +84,6 @@ private func readPlist(
         }
     }
 
-    CFReadStreamClose(stream)
-    
-    if #available(iOS 15, *) {
-        os_log("[Satella] Read \(CFDataGetLength(data)) bytes from plist")
-    } else {
-        os_log("[Satella] Finished reading plist, returning")
-    }
-
     return CFPropertyListCreateWithData(nil, data, 0, nil, nil)?.takeRetainedValue() as? [String: Any]
 }
 
@@ -102,7 +91,7 @@ private func readPlist(
 
 private func isSandboxed() -> Bool {
     #if os(macOS)
-        false
+        true
     #else
         guard let url: CFURL = CFCopyHomeDirectoryURL(),
               let str: CFString = CFURLGetString(url)
@@ -114,27 +103,13 @@ private func isSandboxed() -> Bool {
     #endif
 }
 
-// MARK: CoreFoundation <3- Swift conversions
+// MARK: CoreFoundation <-> Swift conversions
 
 private func getCFString(
     from str: String
 ) -> CFString {
     let cString: UnsafeMutablePointer<Int8> = strdup(str)
     return CFStringCreateWithCString(nil, cString, CFStringBuiltInEncodings.UTF8.rawValue)
-}
-
-private func getString(
-    from cfStr: CFString
-) -> String {
-    let length: CFIndex = CFStringGetLength(cfStr)
-    let maxSize: CFIndex = CFStringGetMaximumSizeForEncoding(length, CFStringBuiltInEncodings.UTF8.rawValue)
-    var buffer: [UInt8] = .init(repeating: 0, count: maxSize)
-    
-    guard CFStringGetCString(cfStr, &buffer, maxSize, CFStringBuiltInEncodings.UTF8.rawValue) else {
-        return ""
-    }
-    
-    return String(cString: buffer)
 }
 
 private func getDictionary(
