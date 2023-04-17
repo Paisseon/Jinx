@@ -70,9 +70,8 @@ public extension HookGroup {
     @discardableResult
     func hook() -> [Bool] {
         var results: [Bool] = .init(repeating: false, count: 10)
-        var selectors: [Selector?] = .init(repeating: nil, count: 10)
-        var replaces: [Any?] = .init(repeating: nil, count: 10)
-        let types: [Any.Type] = [T0.self, T1.self, T2.self, T3.self, T4.self, T5.self, T6.self, T7.self, T8.self, T9.self]
+        var selectors: [Selector?] = [sel0] + .init(repeating: nil, count: 9)
+        var replaces: [Any?] = [replace0] + .init(repeating: nil, count: 9)
 
         guard let cls else {
             return results
@@ -81,24 +80,26 @@ public extension HookGroup {
         let mirror: Mirror = .init(reflecting: self)
 
         for child: Mirror.Child in mirror.children {
-            if child.label?.hasPrefix("sel") == true,
-               child.label?.count == 4,
-               let i: Int = .init(String(describing: child.label?.last))
+            if child.label?.count == 4,
+               child.label?.hasPrefix("sel") == true,
+               let i: Int = .init(String(child.label?.last ?? "🥺"))
             {
                 selectors[i] = child.value as? Selector
-            } else if child.label?.hasPrefix("replace") == true,
-                      child.label?.count == 8,
-                      let i: Int = .init(String(describing: child.label?.last))
+            }
+            
+            if child.label?.count == 8,
+               child.label?.hasPrefix("replace") == true,
+               let i: Int = .init(String(child.label?.last ?? "🥺"))
             {
                 replaces[i] = child.value
             }
         }
         
         for i: Int in 0 ..< 10 {
-            if let replace: Any = replaces[i], let selector: Selector = selectors[i], type(of: replace) == types[i] {
+            if let replace: Any = replaces[i], let selector: Selector = selectors[i] {
                 var orig: OpaquePointer? = nil
                 results[i] = Replace.message(cls, selector, with: Self.opaquePointer(from: replace), orig: &orig)
-                Storage.setOrigOpaque(orig, for: i)
+                Storage.setOrigOpaque(orig, for: Self.uuid + i)
             }
         }
 
