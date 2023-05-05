@@ -51,13 +51,4 @@ public extension Hook {
         
         return Replace.message(cls, sel, with: Self.opaquePointer(from: replace), orig: &Self._orig)
     }
-    
-    @discardableResult
-    func unhook() -> Bool {
-        guard let cls else {
-            return false
-        }
-        
-        return Replace.message(cls, sel, with: Self.opaquePointer(from: Self.orig), orig: &Self._orig)
-    }
 }

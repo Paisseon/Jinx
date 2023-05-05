@@ -8,8 +8,6 @@
 import ObjectiveC
 
 struct Replace {
-    // MARK: Internal
-
     static func message(
         _ cls: AnyClass,
         _ sel: Selector,
@@ -29,9 +27,9 @@ struct Replace {
         lock.locked {
             orig = class_replaceMethod(cls, sel, replace, types)
         }
-        
+
         var superclass: AnyClass? = class_getSuperclass(cls)
-        
+
         while orig == nil,
               let thisSuper: AnyClass = superclass
         {
@@ -40,14 +38,12 @@ struct Replace {
                     orig = method_getImplementation(method)
                 }
             }
-            
+
             superclass = class_getSuperclass(thisSuper)
         }
 
         return orig != nil
     }
-
-    // MARK: Private
 
     private static let lock: Lock = .init()
 

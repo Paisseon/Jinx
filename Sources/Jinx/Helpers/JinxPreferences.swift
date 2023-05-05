@@ -7,11 +7,7 @@
 
 import CoreFoundation
 
-// MARK: - JinxPreferences
-
 public struct JinxPreferences {
-    // MARK: Lifecycle
-
     public init(
         for domain: String
     ) {
@@ -25,19 +21,17 @@ public struct JinxPreferences {
                 kCFPreferencesCurrentUser,
                 kCFPreferencesAnyHost
             ) ?? CFArrayCreate(nil, nil, 0, nil)
-            
+
             let cfDict: CFDictionary = CFPreferencesCopyMultiple(
                 keyList,
                 cfDomain,
                 kCFPreferencesCurrentUser,
                 kCFPreferencesAnyHost
             )
-            
+
             dict = getDictionary(from: cfDict)
         }
     }
-
-    // MARK: Public
 
     public func get<T>(
         for key: String,
@@ -45,8 +39,6 @@ public struct JinxPreferences {
     ) -> T {
         dict[key] as? T ?? val
     }
-
-    // MARK: Private
 
     private let dict: [String: Any]
 }
@@ -56,25 +48,18 @@ public struct JinxPreferences {
 private func readPlist(
     for path: String
 ) -> [String: Any]? {
-    let _path: String = access(path.withRootPath, F_OK) == 0 ? path.withRootPath : path
-    
-    guard access(_path, R_OK) == 0,
-          let url: CFURL = CFURLCreateWithFileSystemPath(nil, getCFString(from: _path), .cfurlposixPathStyle, false)
-    else {
+    guard let url: CFURL = CFURLCreateWithFileSystemPath(nil, getCFString(from: path.withRootPath), .cfurlposixPathStyle, false) else {
         return nil
     }
 
     let stream: CFReadStream = CFReadStreamCreateWithFile(nil, url)
     var buffer: [UInt8] = .init(repeating: 0, count: 0x1000)
     let data: CFMutableData = CFDataCreateMutable(nil, 0)
-    
-    defer {
-        CFReadStreamClose(stream)
-    }
 
     guard CFReadStreamOpen(stream) else {
         return nil
     }
+    defer { CFReadStreamClose(stream) }
 
     while CFReadStreamHasBytesAvailable(stream) {
         let byteCount = CFReadStreamRead(stream, &buffer, buffer.count)
@@ -118,6 +103,6 @@ private func getDictionary(
     var format: CFPropertyListFormat = .binaryFormat_v1_0
     let cfData: CFData? = CFPropertyListCreateData(nil, cfDict, .binaryFormat_v1_0, 0, nil)?.takeUnretainedValue()
     let cfPlist: CFPropertyList? = CFPropertyListCreateWithData(nil, cfData, 0, &format, nil).takeUnretainedValue()
-    
+
     return cfPlist as? [String: Any] ?? [:]
 }

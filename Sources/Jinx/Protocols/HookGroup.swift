@@ -6,8 +6,7 @@
 //
 
 import ObjectiveC
-
-// Quoth Kabir Oberai: "y u no variadic generics, swift :/"
+import os
 
 public protocol HookGroup {
     associatedtype T0
@@ -97,6 +96,8 @@ public extension HookGroup {
         
         for i: Int in 0 ..< 10 {
             if let replace: Any = replaces[i], let selector: Selector = selectors[i] {
+                os_log("Replace and Selector both valid for group selector %{public}d", i)
+                
                 var orig: OpaquePointer? = nil
                 results[i] = Replace.message(cls, selector, with: Self.opaquePointer(from: replace), orig: &orig)
                 Storage.setOrigOpaque(orig, for: Self.uuid + i)
