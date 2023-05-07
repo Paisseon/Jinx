@@ -7,7 +7,6 @@
 
 import CoreFoundation
 
-#if JINX_PREFERENCES
 public struct JinxPreferences {
     public init(
         for domain: String
@@ -104,4 +103,3 @@ private func getDictionary(
 
     return cfPlist as? [String: Any] ?? [:]
 }
-#endif
