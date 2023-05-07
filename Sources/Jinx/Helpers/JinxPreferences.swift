@@ -7,6 +7,7 @@
 
 import CoreFoundation
 
+#if JINX_PREFERENCES
 public struct JinxPreferences {
     public init(
         for domain: String
@@ -14,7 +15,7 @@ public struct JinxPreferences {
         let cfDomain: CFString = getCFString(from: domain)
 
         if isSandboxed() {
-            dict = readPlist(for: "/var/mobile/Library/Preferences/\(domain).plist") ?? [:]
+            dict = readPlist(for: "/var/mobile/Library/Preferences/\(domain).plist".withRootPath) ?? [:]
         } else {
             let keyList: CFArray = CFPreferencesCopyKeyList(
                 cfDomain,
@@ -59,6 +60,7 @@ private func readPlist(
     guard CFReadStreamOpen(stream) else {
         return nil
     }
+    
     defer { CFReadStreamClose(stream) }
 
     while CFReadStreamHasBytesAvailable(stream) {
@@ -75,17 +77,13 @@ private func readPlist(
 // MARK: Determine if we are in a sandboxed process, i.e., a user app
 
 private func isSandboxed() -> Bool {
-    #if os(macOS)
-        true
-    #else
-        guard let url: CFURL = CFCopyHomeDirectoryURL(),
-              let str: CFString = CFURLGetString(url)
-        else {
-            return false
-        }
-
-        return CFStringCompare(str, getCFString(from: "file:///var/mobile/"), .compareBackwards) != .compareEqualTo
-    #endif
+    guard let url: CFURL = CFCopyHomeDirectoryURL(),
+          let str: CFString = CFURLGetString(url)
+    else {
+        return false
+    }
+    
+    return CFStringCompare(str, getCFString(from: "file:///var/mobile/"), .compareBackwards) != .compareEqualTo
 }
 
 // MARK: CoreFoundation <-> Swift conversions
@@ -106,3 +104,4 @@ private func getDictionary(
 
     return cfPlist as? [String: Any] ?? [:]
 }
+#endif
