@@ -9,7 +9,6 @@ public protocol HookFunc {
     associatedtype T
     
     var name: String { get }
-    var image: String? { get }
     var replace: T { get }
 }
 
