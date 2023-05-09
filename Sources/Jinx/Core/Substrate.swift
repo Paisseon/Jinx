@@ -5,8 +5,6 @@
 //  Created by Lilliana on 08/05/2023.
 //
 
-import Darwin.C
-
 struct Substrate {
     let hook: RebindHook
     
@@ -29,14 +27,5 @@ struct Substrate {
     private typealias T0 = @convention(c) (OpaquePointer?, UnsafePointer<Int8>) -> UnsafeMutableRawPointer?
     private typealias T1 = @convention(c) (UnsafeMutableRawPointer, UnsafeRawPointer, UnsafeMutablePointer<UnsafeMutableRawPointer?>) -> Void
     
-    private let substratePath: String = {
-        var buffer: [Int8] = .init(repeating: 0, count: Int(PATH_MAX))
-        var path: String = "/usr/lib/libsubstrate.dylib".withRootPath
-        
-        if readlink(path, &buffer, buffer.count) != -1 {
-            path = String(cString: buffer)
-        }
-        
-        return path
-    }()
+    private let substratePath: String = "/usr/lib/libsubstrate.dylib".withRootPath().resolvingSymlinks()
 }
