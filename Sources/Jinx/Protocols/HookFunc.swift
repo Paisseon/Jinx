@@ -29,21 +29,19 @@ public extension HookFunc {
     
     @discardableResult
     func hook() -> Bool {
-        var hook: RebindHook? = nil
+        var ret: Bool = true
         let replacePtr: UnsafeMutableRawPointer = unsafeBitCast(replace, to: UnsafeMutableRawPointer.self)
         
         withUnsafeMutablePointer(to: &Self._orig) { origPtr in
-            hook = RebindHook(name: name, replace: replacePtr, orig: origPtr)
+            let hook: RebindHook = .init(name: name, replace: replacePtr, orig: origPtr)
+            
+            if Rebind(hook: hook).rebind() {
+                ret = true
+            } else {
+                ret = Substrate(hook: hook).hookFunc()
+            }
         }
         
-        guard let hook else {
-            return false
-        }
-        
-        if Rebind(hook: hook).rebind() {
-            return true
-        }
-        
-        return Substrate(hook: hook).hookFunc()
+        return ret
     }
 }
