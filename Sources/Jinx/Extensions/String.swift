@@ -5,25 +5,15 @@
 //  Created by Lilliana on 13/04/2023.
 //
 
-import Darwin
+import Darwin.POSIX
 
 public extension String {
-    private static let rootPath: String = {
-        let dir: UnsafeMutablePointer<DIR> = opendir("/private/preboot")
-        
-        while let entry: UnsafeMutablePointer<dirent> = readdir(dir) {
-            let bootHash: String = .init(cString: withUnsafeBytes(of: entry.pointee.d_name) { Array($0) })
-            
-            if bootHash.count == 40 {
-                return "/private/preboot/\(bootHash)/procursus/"
-            }
-        }
-        
-        return "/"
-    }()
-    
     func withRootPath() -> String {
-        Self.rootPath + self
+        #if JINX_ROOTLESS
+        ("/var/jb" + self).resolvingSymlinks()
+        #else
+        self
+        #endif
     }
     
     func resolvingSymlinks() -> String {

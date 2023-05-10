@@ -9,8 +9,8 @@ struct Substrate {
     let hook: RebindHook
     
     func hookFunc() -> Bool {
-        guard let MSFindSymbol: T0 = Storage.getSymbol("MSFindSymbol", in: substratePath),
-              let MSHookFunction: T1 = Storage.getSymbol("MSHookFunction", in: substratePath),
+        guard let MSFindSymbol: T0 = Storage.getSymbol("MSFindSymbol", in: Self.substratePath),
+              let MSHookFunction: T1 = Storage.getSymbol("MSHookFunction", in: Self.substratePath),
               let symbol: UnsafeMutableRawPointer = MSFindSymbol(nil, "_" + hook.name)
         else {
             return false
@@ -27,5 +27,5 @@ struct Substrate {
     private typealias T0 = @convention(c) (OpaquePointer?, UnsafePointer<Int8>) -> UnsafeMutableRawPointer?
     private typealias T1 = @convention(c) (UnsafeMutableRawPointer, UnsafeRawPointer, UnsafeMutablePointer<UnsafeMutableRawPointer?>) -> Void
     
-    private let substratePath: String = "/usr/lib/libsubstrate.dylib".withRootPath().resolvingSymlinks()
+    private static let substratePath: String = "/usr/lib/libsubstrate.dylib".withRootPath()
 }

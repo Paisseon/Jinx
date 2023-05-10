@@ -43,12 +43,10 @@ public struct JinxPreferences {
     private let dict: [String: Any]
 }
 
-// MARK: Read the preferences plist to a [String: Any] dictionary
-
 private func readPlist(
     for path: String
 ) -> [String: Any]? {
-    guard let url: CFURL = CFURLCreateWithFileSystemPath(nil, getCFString(from: path.withRootPath()), .cfurlposixPathStyle, false) else {
+    guard let url: CFURL = CFURLCreateWithFileSystemPath(nil, getCFString(from: path), .cfurlposixPathStyle, false) else {
         return nil
     }
 
@@ -73,9 +71,10 @@ private func readPlist(
     return CFPropertyListCreateWithData(nil, data, 0, nil, nil)?.takeRetainedValue() as? [String: Any]
 }
 
-// MARK: Determine if we are in a sandboxed process, i.e., a user app
-
 private func isSandboxed() -> Bool {
+    #if os(macOS)
+    return true
+    #else
     guard let url: CFURL = CFCopyHomeDirectoryURL(),
           let str: CFString = CFURLGetString(url)
     else {
@@ -83,9 +82,8 @@ private func isSandboxed() -> Bool {
     }
     
     return CFStringCompare(str, getCFString(from: "file:///var/mobile/"), .compareBackwards) != .compareEqualTo
+    #endif
 }
-
-// MARK: CoreFoundation <-> Swift conversions
 
 private func getCFString(
     from str: String
