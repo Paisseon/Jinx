@@ -1,55 +1,54 @@
+//
+//  Hook.swift
+//  Jinx
+//
+//  Created by Lilliana on 25/03/2023.
+//
+
 import ObjectiveC
 
 public protocol Hook {
     associatedtype T
     
-    var `class`: AnyClass? { get }
-    var selector: Selector { get }
-    var replacement: T { get }
+    var cls: AnyClass? { get }
+    var sel: Selector { get }
+    var replace: T { get }
 }
 
 public extension Hook {
-    private static var _orig: Pointer? {
-        get {
-            PowPow.origMap.get(ObjectIdentifier(Self.self).hashValue) ?? nil
-        }
-        
-        set {
-            PowPow.origMap.set(newValue, for: ObjectIdentifier(Self.self).hashValue)
-        }
+    private static var uuid: Int {
+        Storage.getUUID(for: ObjectIdentifier(Self.self))
+    }
+    
+    private static var _orig: OpaquePointer? {
+        get { Storage.getOrigOpaque(for: Self.uuid) }
+        set { Storage.setOrigOpaque(newValue, for: Self.uuid) }
+    }
+    
+    private static func opaquePointer<U>(
+        from closure: U
+    ) -> OpaquePointer {
+        withUnsafePointer(to: closure) { UnsafeMutableRawPointer(mutating: $0).assumingMemoryBound(to: OpaquePointer.self).pointee }
+    }
+    
+    private static func safeBitCast<U>(
+        _ ptr: OpaquePointer?,
+        to type: U.Type
+    ) -> U {
+        let tPtr: UnsafePointer<U> = withUnsafePointer(to: ptr, { UnsafeRawPointer($0).bindMemory(to: U.self, capacity: 1) })
+        return tPtr.pointee
     }
     
     static var orig: T {
-        if case .raw(let ptr) = _orig {
-            return unsafeBitCast(ptr, to: T.self)
-        }
-        
-        if case .opaque(let ptr) = _orig {
-            return unsafeBitCast(ptr, to: T.self)
-        }
-        
-        return unsafeBitCast(_orig, to: T.self)
+        safeBitCast(_orig, to: T.self)
     }
     
     @discardableResult
-    func hook(
-        onlyIf condition: Bool = true
-    ) -> JinxResult {
-        guard condition,
-              let `class`
-        else {
-            return .noClass
+    func hook() -> Bool {
+        guard let cls else {
+            return false
         }
         
-        return PowPow.replace(`class`, selector, with: replacement, orig: &Self._orig)
-    }
-    
-    @discardableResult
-    func unhook() -> JinxResult {
-        guard let `class` else {
-            return .noClass
-        }
-        
-        return PowPow.replace(`class`, selector, with: Self.orig, orig: &Self._orig)
+        return Replace.message(cls, sel, with: Self.opaquePointer(from: replace), orig: &Self._orig)
     }
 }

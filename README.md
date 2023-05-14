@@ -1,67 +1,102 @@
 # Jinx
-*Pure Swift tweak development framework for iOS 12-16*
+*Pure Swift tweak development library for iOS and macOS*
 
-This is a tool for tweak developers. Probably just me tbh, but others are welcome to use any or all of it they want. If you are an end user, this repo means nothing for you.
+Jinx is a library for tweak developers to write their tweaks in Swift.
 
-Please note that this does require a macOS device with Xcode to compile. You’ll also need to run `make spm` and open the Package.swift file in Xcode at least once, as Jinx is distributed through SPM.
+## Prerequisites
+- macOS device with Xcode 14 or newer
+- (for using templates) Theos
 
 ## Features
-- Hook ObjC messages, C/C++/Swift functions, and ivars
+- Struct-based hooks for ObjC messages and C functions
 - Fearless speculative and dynamic hooking
-- Support for Libhooker, Substrate, and internal APIs
-- 100% Swift and ARM64 Assembly
-- Works on jailed devices without injecting Substrate
-- No preprocessor needed, you can use this in an app
-- Uses SPM for automatic (developer-end) updates
-- Fast, small, and lightweight
-- Read preferences from sandboxed processes w/ Powder
-- Returns useful error codes for debugging
-- Two easy templates to use with Theos
+- Supports batched hooking for ObjC messages
+- Written in 100% Swift and Assembly
+- No preprocessors— better for Xcode and fast compilation
+- First tweak framework with SPM support =)
+- Small, fast, and lightweight
+- Easy templates for use with Theos (prefs or no prefs)
+- Works on rootless even from non-rootless branches
+- Includes preferences reader
 
 ## Installation
-1. Make sure that Theos (Orion branch) is already installed
-2. Download the latest archive from Releases
-3. Extract and run `python3 install_jinx.py`
-4. Done!
+### Theos
+1. Download the latest archive from Releases
+2. Extract and run `python3 install_jinx.py`
+### Without Theos
+1. Simply add this repo as a dependency to your Package.swift file
 
 ## Usage
-### Hooking ObjC Messages
-The Hook protocol is the one which you will most often use, as it is responsible for hooking Objective-C messages.
+### Activating hooks
+In the provided Tweak struct’s `ctor` function, initialise an instance of your hook, then run its `.hook()` function:
 
-There are four immutable variables which you must define in a struct conforming to Hook:
+```swift
+ExampleHook().hook()
+ExampleHookGroup().hook()
+ExampleHookFunc().hook()
+```
 
-- **T**: typealias for the signature of the hooked method. Must conform to the C convention.
-- **\`class\`**: `AnyClass?`. The class you will hook. A `nil` value will prevent the hook from taking place.
-- **selector**: `Selector`. The name of the method you will hook.
-- **replacement**: `T`. A closure which replaces the original code.
+### Hooking an ObjC message
+```swift
+struct ExampleHook: Hook {
+    typealias T = @convention(c) (AnyObject, Selector) -> Bool
 
-There is also one function which can be used.
+    let cls: AnyClass? = objc_lookUpClass("SomeClass")
+    let sel: Selector = sel_registerName("someMethod")
+    let replace: T = { _, _ in true }
+}
+```
 
-- **hook(onlyIf: Bool)**: `(Bool) -> Bool`. Returns true if the hook succeeds, and false if it fails. The onlyIf parameter defaults to true.
+### Hooking multiple ObjC messages in a single class
+One `HookGroup`-conforming struct can hold `T0`-`T9` and corresponding `sel` and `replace` properties.
 
-## Hooking Functions
-The HookFunc protocol is responsible for hooking C, C++, and Swift functions.
+```swift
+struct ExampleHookGroup: HookGroup {
+    typealias T0 = @convention(c) (AnyObject, Selector) -> Int
+    typealias T1 = @convention(c) (AnyObject, Selector) -> String
 
-There are four immutable variables which you must define.
+    let cls: AnyClass? = objc_lookUpClass("SomeClass")
 
-- **T**: typealias for the signature of the hooked function. Must conform to the C convention.
-- **function**: `String`. The symbol of the function you will hook. Must have a leading underscore. For C++/Swift functions, use the mangled name.
-- **image**: `String?`. The path to the image containing the target function. You may pass `nil` to refer to the current process.
-- **replacement**: `T`. A closure which replaces the original code.
+    let sel0: Selector = sel_registerName("firstMethod")
+    let sel1: Selector = sel_registerName("secondMethod")
 
-There is also one function which can be used.
+    let replace0: T0 = { _, _ in 413 }
+    let replace1: T1 = { _, _ in "EMT!" }
 
-- **hook(onlyIf: Bool)**: `(Bool) -> Bool`. Returns true if the hook succeeds, and false if it fails. The onlyIf parameter defaults to true.
+```
 
-## Calling Original Code
-To call original implementation of a message or function, you can add `orig()` to your `replacement`. Just supply the arguments of the closure and you’re good to go.
+### Hooking a C, C++, or Swift function
+```swift
+struct ExampleHookFunc: HookFunc {
+    typealias T = @convention(c) (Int) -> Void
+    
+    let name: String = "someFunc"
+    let image: String? = "/usr/lib/system/libsomething.dylib"
+    let replace: T = { _ in NSLog("Hej fra someFunc!") }
+}
+```
 
-## Hooking Instance Variables
-To set an instance variable from inside a hook, you can use `Mouser.setIvar(_:for:to:)` with the name, object reference, and desired value.
+### Calling original code
+For `Hook` and `HookFunc`, simply call `orig()` from within the replacement definition and pass the requisite parameters. For example, `orig(obj, sel)`. 
 
-You can also get the value of an instance variable with `Mouser.getIvar(_:for:)` with the name and object reference.
+`HookGroup` uses `orig0` through `orig9`. These are identical to the other protocols’ `orig` except for the name, which allows unambiguity as to which sub-hook it relates.
 
-## Getting Preferences
-To get preferences, you will need to use the tweak\_swift\_jinx\_prefs template, which includes by default all the requisite code. 
+### Getting and setting instance variables
+Inside a `Hook` or `HookGroup` replacement definition, 
 
-In the Helpers/Preferences.swift file, you will see a variable `isEnabled`, just follow that pattern for assigning variables and change the Root.plist file in Resources folder accordingly.
+```swift
+Ivar.get("ivarName", for: obj) // returns an optional
+Ivar.set("ivarName", for: obj, to: 413)
+```
+
+### Dynamic hooking
+To use dynamic hooking (i.e., hooking a class and method determined at runtime), you can abstain from assigning a value to cls and/or sel in the struct definition and instead assign it during initialisation.
+
+The same principle goes for `HookGroup` and `HookFunc` with their respective properties.
+
+```swift
+ExampleHook(cls: objc_lookUpClass(someString), sel: sel_registerName(anotherString)).hook()
+```
+
+### Reading preferences
+Preferences are stored in the JinxPreferences struct. Simply create an instance of this struct and use `let isEnabled: Bool = prefs.get(for: "isEnabled", default: true)`

@@ -1,61 +1,44 @@
+//
+//  HookFunc.swift
+//  Jinx
+//
+//  Created by Lilliana on 25/03/2023.
+//
+
 public protocol HookFunc {
     associatedtype T
     
-    var function: String { get }
-    var image: String? { get }
-    var replacement: T { get }
+    var name: String { get }
+    var replace: T { get }
 }
 
 public extension HookFunc {
-    private static var _orig: Pointer? {
-        get {
-            PowPow.origMap.get(ObjectIdentifier(Self.self).hashValue) ?? nil
-        }
-        
-        set {
-            PowPow.origMap.set(newValue, for: ObjectIdentifier(Self.self).hashValue)
-        }
+    private static var uuid: Int {
+        Storage.getUUID(for: ObjectIdentifier(Self.self))
+    }
+    
+    private static var _orig: UnsafeMutableRawPointer? {
+        get { Storage.getOrigRaw(for: Self.uuid) }
+        set { Storage.setOrigRaw(newValue, for: Self.uuid) }
     }
     
     static var orig: T {
-        if case .raw(let ptr) = _orig {
-            return unsafeBitCast(ptr, to: T.self)
-        }
-        
         return unsafeBitCast(_orig, to: T.self)
     }
     
     @discardableResult
-    func hook(
-        onlyIf condition: Bool = true
-    ) -> JinxResult {
-        guard condition,
-              let replacementPtr: UnsafeMutableRawPointer = unsafeBitCast(replacement, to: UnsafeMutableRawPointer?.self)
-        else {
-            return .noFunction
-        }
+    func hook() -> Bool {
+        var ret: Bool = true
+        let replacePtr: UnsafeMutableRawPointer = unsafeBitCast(replace, to: UnsafeMutableRawPointer.self)
         
-        var tmp: UnsafeMutableRawPointer?
-        let ret: JinxResult = PowPow.replaceFunc(function, in: image, with: replacementPtr, orig: &tmp)
-        
-        if let tmp {
-            Self._orig = .raw(tmp)
-        }
-        
-        return ret
-    }
-    
-    @discardableResult
-    func unhook() -> JinxResult {
-        guard let replacementPtr: UnsafeMutableRawPointer = unsafeBitCast(Self.orig, to: UnsafeMutableRawPointer?.self) else {
-            return .noFunction
-        }
-        
-        var tmp: UnsafeMutableRawPointer?
-        let ret: JinxResult = PowPow.replaceFunc(function, in: image, with: replacementPtr, orig: &tmp)
-        
-        if let tmp {
-            Self._orig = .raw(tmp)
+        withUnsafeMutablePointer(to: &Self._orig) { origPtr in
+            let hook: RebindHook = .init(name: name, replace: replacePtr, orig: origPtr)
+            
+            if Rebind(hook: hook).rebind() {
+                ret = true
+            } else {
+                ret = Substrate(hook: hook).hookFunc()
+            }
         }
         
         return ret
